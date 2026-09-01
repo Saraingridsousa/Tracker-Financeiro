@@ -232,7 +232,14 @@ function App() {
       const parsed: Transaction[] = [];
 
       for (const file of Array.from(files)) {
-        const list = await parseBankFile(file);
+        let list: Transaction[] = [];
+
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          const { parsePDFStatement } = await import('./utils/pdfParser');
+          list = await parsePDFStatement(file);
+        } else {
+          list = await parseBankFile(file);
+        }
 
         const normalized = list.map((item) => {
           const categoryId = inferCategory(item.description);
@@ -246,7 +253,15 @@ function App() {
         parsed.push(...normalized);
       }
 
+      if (!parsed.length) {
+        window.alert('Nenhuma transação foi reconhecida neste arquivo. Verifique se o extrato está em formato válido (.CSV, .OFX ou .PDF).');
+        return;
+      }
+
       addTransactions(parsed);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível importar este arquivo.';
+      window.alert(message);
     } finally {
       setIsImporting(false);
     }
@@ -385,6 +400,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                title="Formatos suportados: .OFX, .CSV, .PDF"
                 className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-400"
               >
                 <Plus className="h-4 w-4" />
@@ -393,8 +409,9 @@ function App() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.ofx"
+                accept=".csv,.ofx,.pdf"
                 multiple
+                title="Formatos suportados: .OFX, .CSV, .PDF"
                 hidden
                 onChange={(event) => handleFiles(event.target.files)}
               />
@@ -460,7 +477,10 @@ function App() {
                   <div>
                     <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Seu painel está limpo</h2>
                     <p className="mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-                      Comece importando um extrato .CSV ou .OFX para visualizar seus gastos, receitas e categorias em tempo real.
+                      Comece importando um extrato .OFX, .CSV ou .PDF para visualizar seus gastos, receitas e categorias em tempo real.
+                    </p>
+                    <p className="mt-2 text-xs font-medium uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                      Formatos suportados: .OFX, .CSV, .PDF
                     </p>
                   </div>
                   <button
@@ -478,6 +498,7 @@ function App() {
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Importar extrato</h2>
                     <p className="text-sm text-slate-500 dark:text-slate-400">Adicione mais arquivos sem perder os dados já cadastrados.</p>
+                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Formatos suportados: .OFX, .CSV, .PDF</p>
                   </div>
                   <button
                     type="button"
