@@ -1,4 +1,5 @@
 export type TransactionType = 'income' | 'expense';
+export type AssetType = 'Ações' | 'FIIs' | 'Tesouro Direto' | 'Criptomoedas' | 'ETFs' | 'Renda Fixa' | 'Outros';
 
 export interface Transaction {
   id: string;
@@ -34,10 +35,42 @@ export interface Rule {
   isActive: boolean;
 }
 
+export interface AssetPosition {
+  id: string;
+  tickerOrName: string;
+  type: AssetType;
+  quantity: number;
+  avgPrice: number;
+  currentPrice: number;
+  targetAllocationPercent?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InvestmentOrder {
+  id: string;
+  assetId: string;
+  ticker: string;
+  type: AssetType;
+  operation: 'BUY' | 'SELL';
+  date: string;
+  quantity: number;
+  unitPrice: number;
+  totalValue: number;
+}
+
+export interface InvestmentBackupPayload {
+  assets: AssetPosition[];
+  investmentOrders: InvestmentOrder[];
+  exportedAt: string;
+}
+
 export interface BackupPayload {
   transactions: Transaction[];
   categories: Category[];
   rules: Rule[];
+  assets?: AssetPosition[];
+  investmentOrders?: InvestmentOrder[];
   exportedAt: string;
 }
 

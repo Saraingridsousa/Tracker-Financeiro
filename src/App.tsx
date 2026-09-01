@@ -4,7 +4,9 @@ import {
   Download,
   FileText,
   Filter,
+  LayoutDashboard,
   Moon,
+  PieChart,
   Plus,
   Settings,
   Sun,
@@ -15,8 +17,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { CategoryPieChart } from './components/CategoryPieChart';
+import { InvestmentsDashboard } from './components/InvestmentsDashboard';
 import { MonthlyBarChart } from './components/MonthlyBarChart';
 import { TransactionTable } from './components/TransactionTable';
+import { useInvestments } from './hooks/useInvestments';
 import { parseBankFile } from './lib/parseBankFile';
 import { useTransactions } from './hooks/useTransactions';
 import type { BackupPayload, Category, Transaction } from './types/finance';
@@ -125,6 +129,9 @@ function App() {
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState<'overview' | 'investments'>('overview');
+  const transactionsStore = useTransactions();
+  const investmentsStore = useInvestments();
   const {
     transactions,
     categories,
@@ -140,7 +147,20 @@ function App() {
     resetAllData,
     importBackup,
     exportBackup,
-  } = useTransactions();
+  } = transactionsStore;
+  const {
+    assets,
+    orders,
+    addAsset,
+    updateAsset,
+    deleteAsset,
+    addOrder,
+    deleteOrder,
+    importAssetsFromCsv,
+    resetAllData: resetInvestments,
+    importBackup: importInvestmentBackup,
+    exportBackup: exportInvestmentBackup,
+  } = investmentsStore;
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem('tracker-theme');
@@ -233,7 +253,10 @@ function App() {
   };
 
   const exportBackupFile = () => {
-    const payload = exportBackup();
+    const payload = {
+      ...exportBackup(),
+      ...exportInvestmentBackup(),
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -250,6 +273,11 @@ function App() {
     const text = await file.text();
     const payload = JSON.parse(text) as BackupPayload;
     importBackup(payload);
+    importInvestmentBackup({
+      assets: payload.assets ?? [],
+      investmentOrders: payload.investmentOrders ?? [],
+      exportedAt: payload.exportedAt ?? new Date().toISOString(),
+    });
     event.target.value = '';
   };
 
@@ -259,6 +287,7 @@ function App() {
     }
 
     resetAllData();
+    resetInvestments();
   };
 
   return (
@@ -380,60 +409,88 @@ function App() {
           </div>
         </header>
 
-        {transactions.length === 0 ? (
-          <section
-            className={`mb-8 rounded-2xl border-2 border-dashed p-8 transition ${
-              isDragging ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70'
-            }`}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsDragging(false);
-              handleFiles(event.dataTransfer.files);
-            }}
-          >
-            <div className="flex flex-col items-center justify-center gap-4 text-center">
-              <div className="rounded-full bg-cyan-500/10 p-4 text-cyan-600 dark:bg-slate-800 dark:text-cyan-400">
-                <FileText className="h-8 w-8" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Seu painel está limpo</h2>
-                <p className="mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-                  Comece importando um extrato .CSV ou .OFX para visualizar seus gastos, receitas e categorias em tempo real.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-medium text-slate-950 hover:bg-cyan-400"
-              >
-                {isImporting ? 'Importando...' : 'Importar primeiro extrato'}
-              </button>
-            </div>
-          </section>
-        ) : (
-          <section className="mb-8 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Importar extrato</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Adicione mais arquivos sem perder os dados já cadastrados.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-              >
-                {isImporting ? 'Importando...' : 'Selecionar arquivos'}
-              </button>
-            </div>
-          </section>
-        )}
+        <div className="mb-6 flex justify-start">
+          <div className="inline-flex items-center justify-start gap-1 rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+            {[
+              { key: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
+              { key: 'investments', label: 'Investimentos', icon: PieChart },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key as 'overview' | 'investments')}
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                    activeTab === tab.key
+                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {activeTab === 'overview' ? (
+          <>
+            {transactions.length === 0 ? (
+              <section
+                className={`mb-8 rounded-2xl border-2 border-dashed p-8 transition ${
+                  isDragging ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70'
+                }`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setIsDragging(false);
+                  handleFiles(event.dataTransfer.files);
+                }}
+              >
+                <div className="flex flex-col items-center justify-center gap-4 text-center">
+                  <div className="rounded-full bg-cyan-500/10 p-4 text-cyan-600 dark:bg-slate-800 dark:text-cyan-400">
+                    <FileText className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Seu painel está limpo</h2>
+                    <p className="mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+                      Comece importando um extrato .CSV ou .OFX para visualizar seus gastos, receitas e categorias em tempo real.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-medium text-slate-950 hover:bg-cyan-400"
+                  >
+                    {isImporting ? 'Importando...' : 'Importar primeiro extrato'}
+                  </button>
+                </div>
+              </section>
+            ) : (
+              <section className="mb-8 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Importar extrato</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Adicione mais arquivos sem perder os dados já cadastrados.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    {isImporting ? 'Importando...' : 'Selecionar arquivos'}
+                  </button>
+                </div>
+              </section>
+            )}
+
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
             { label: 'Saldo atual', value: summary.balance, icon: Wallet, tone: 'emerald' },
             { label: 'Entradas', value: summary.income, icon: ArrowUpCircle, tone: 'cyan' },
@@ -491,35 +548,48 @@ function App() {
           </div>
         </section>
 
-        <div className="mt-8">
-          {transactions.length > 0 ? (
-            <>
-              <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-1 items-center gap-3">
-                  <label className="text-sm text-slate-600 dark:text-slate-300">Filtrar por categoria</label>
-                  <select
-                    value={selectedCategoryFilter}
-                    onChange={(event) => setSelectedCategoryFilter(event.target.value)}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                  >
-                    <option value="all">Todas</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+            <div className="mt-8">
+              {transactions.length > 0 ? (
+                <>
+                  <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-1 items-center gap-3">
+                      <label className="text-sm text-slate-600 dark:text-slate-300">Filtrar por categoria</label>
+                      <select
+                        value={selectedCategoryFilter}
+                        onChange={(event) => setSelectedCategoryFilter(event.target.value)}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                      >
+                        <option value="all">Todas</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
-              <TransactionTable
-                transactions={filteredTransactions}
-                categories={categories}
-                onUpdateCategory={(transactionId, categoryId) => updateTransactionCategory(transactionId, categoryId)}
-              />
-            </>
-          ) : null}
-        </div>
+                  <TransactionTable
+                    transactions={filteredTransactions}
+                    categories={categories}
+                    onUpdateCategory={(transactionId, categoryId) => updateTransactionCategory(transactionId, categoryId)}
+                  />
+                </>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <InvestmentsDashboard
+            assets={assets}
+            orders={orders}
+            onAddAsset={addAsset}
+            onUpdateAsset={updateAsset}
+            onDeleteAsset={deleteAsset}
+            onAddOrder={addOrder}
+            onDeleteOrder={deleteOrder}
+            onImportCsv={importAssetsFromCsv}
+          />
+        )}
       </div>
 
       <CategoryManagerModal
