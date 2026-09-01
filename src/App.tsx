@@ -22,6 +22,7 @@ const toneStyles = {
   emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
   cyan: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400',
   rose: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+  violet: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
   amber: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
 } as const;
 
@@ -126,6 +127,8 @@ const createDemoTransactions = (): Transaction[] => {
     { id: 'demo-10', date: new Date(today.getFullYear(), today.getMonth() - 2, 5).toISOString().slice(0, 10), description: 'Salário', amount: 4200, type: 'income', categoryId: 'salario', source: 'manual', bankName: 'Demo' },
     { id: 'demo-11', date: new Date(today.getFullYear(), today.getMonth() - 2, 12).toISOString().slice(0, 10), description: 'Cinema', amount: 85, type: 'expense', categoryId: 'lazer', source: 'manual', bankName: 'Demo' },
     { id: 'demo-12', date: new Date(today.getFullYear(), today.getMonth() - 3, 9).toISOString().slice(0, 10), description: 'Abastecimento', amount: 180, type: 'expense', categoryId: 'transporte', source: 'manual', bankName: 'Demo' },
+    { id: 'demo-13', date: new Date(today.getFullYear(), today.getMonth(), 14).toISOString().slice(0, 10), description: 'Pix Enviado - Sofisa', amount: 320, type: 'expense', categoryId: 'transferencia', source: 'manual', bankName: 'Demo' },
+    { id: 'demo-14', date: new Date(today.getFullYear(), today.getMonth(), 18).toISOString().slice(0, 10), description: 'Pagamento de Fatura', amount: 420, type: 'expense', categoryId: 'pagamento_fatura', source: 'manual', bankName: 'Demo' },
   ];
 
   return base.map((item) => ({
@@ -168,13 +171,21 @@ function App() {
       .filter((transaction) => transaction.type === 'expense')
       .reduce((sum, item) => sum + item.amount, 0);
 
+    const neutralTotal = filteredTransactions
+      .filter((transaction) => {
+        const category = categories.find((item) => item.id === transaction.categoryId);
+        return Boolean(category?.isNeutral || category?.excludeFromTotals);
+      })
+      .reduce((sum, item) => sum + item.amount, 0);
+
     return {
       balance: totalIncome - totalExpense,
       income: totalIncome,
       expenses: totalExpense,
       averageExpense: totalExpense > 0 ? totalExpense / Math.max(1, filteredTransactions.filter((tx) => tx.type === 'expense').length) : 0,
+      neutralTotal,
     };
-  }, [filteredTransactions]);
+  }, [categories, filteredTransactions]);
 
   const monthlyChartData = useMemo(() => buildMonthlyData(filteredTransactions), [filteredTransactions]);
   const categoryChartData = useMemo(() => buildCategoryData(filteredTransactions, categories), [filteredTransactions, categories]);
@@ -185,7 +196,7 @@ function App() {
         .map((category) => ({
           ...category,
           total: filteredTransactions
-            .filter((tx) => tx.categoryId === category.id && tx.type === 'expense')
+            .filter((tx) => tx.categoryId === category.id && tx.type === 'expense' && !category.isNeutral)
             .reduce((sum, tx) => sum + tx.amount, 0),
         }))
         .filter((item) => item.total > 0)
@@ -329,7 +340,7 @@ function App() {
             { label: 'Saldo atual', value: summary.balance, icon: Wallet, tone: 'emerald' },
             { label: 'Entradas', value: summary.income, icon: ArrowUpCircle, tone: 'cyan' },
             { label: 'Saídas', value: summary.expenses, icon: ArrowDownCircle, tone: 'rose' },
-            { label: 'Gasto médio', value: summary.averageExpense, icon: TrendingUp, tone: 'amber' },
+            { label: 'Transfer./Investido', value: summary.neutralTotal, icon: TrendingUp, tone: 'violet' },
           ].map(({ label, value, icon: Icon, tone }) => (
             <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
               <div className="flex items-center justify-between">

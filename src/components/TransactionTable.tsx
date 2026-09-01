@@ -73,6 +73,7 @@ export function TransactionTable({ transactions, categories, onUpdateCategory }:
                   {paginatedTransactions.length ? (
                     paginatedTransactions.map((transaction) => {
                       const category = categories.find((item) => item.id === transaction.categoryId) ?? categories[0];
+                      const isNeutral = Boolean(category?.isNeutral || category?.excludeFromTotals);
 
                       return (
                         <tr key={transaction.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
@@ -80,7 +81,14 @@ export function TransactionTable({ transactions, categories, onUpdateCategory }:
                           <td className="px-4 py-3">
                             <div className="flex flex-col">
                               <span className="font-medium text-slate-800 dark:text-slate-100">{transaction.description}</span>
-                              <span className="text-xs text-slate-500 dark:text-slate-400">{transaction.type === 'income' ? 'Entrada' : 'Saída'}</span>
+                              <div className="mt-1 flex items-center gap-2">
+                                <span className="text-xs text-slate-500 dark:text-slate-400">{transaction.type === 'income' ? 'Entrada' : 'Saída'}</span>
+                                {isNeutral && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/60 dark:text-violet-300">
+                                    ⇄ Transferência / Neutro
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3">

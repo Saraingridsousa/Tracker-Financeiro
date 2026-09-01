@@ -23,6 +23,8 @@ export interface Category {
   keywords: string[];
   type: TransactionType | 'both';
   isDefault?: boolean;
+  isNeutral?: boolean;
+  excludeFromTotals?: boolean;
 }
 
 export interface Rule {
@@ -38,4 +40,5 @@ export interface DashboardSummary {
   expenses: number;
   averageExpense: number;
   monthCount: number;
+  neutralTotal: number;
 }

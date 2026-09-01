@@ -5,15 +5,17 @@ import type { Category, DashboardSummary, Transaction } from '../types/finance';
 const STORAGE_KEY = 'tracker-financeiro:data';
 
 const defaultCategories: Category[] = [
-  { id: 'alimentacao', name: 'Alimentação', color: '#ef4444', keywords: ['uber', 'restaurante', 'mercado', 'padaria', 'delivery'], type: 'expense', isDefault: true },
-  { id: 'moradia', name: 'Moradia', color: '#f59e0b', keywords: ['aluguel', 'condominio', 'luz', 'água', 'internet'], type: 'expense', isDefault: true },
-  { id: 'transporte', name: 'Transporte', color: '#3b82f6', keywords: ['uber', 'metro', 'onibus', 'combustivel', 'posto'], type: 'expense', isDefault: true },
-  { id: 'lazer', name: 'Lazer', color: '#8b5cf6', keywords: ['cinema', 'spotify', 'streaming', 'ingresso'], type: 'expense', isDefault: true },
-  { id: 'saude', name: 'Saúde', color: '#10b981', keywords: ['farmacia', 'medico', 'consulta', 'dentista'], type: 'expense', isDefault: true },
-  { id: 'investimentos', name: 'Investimentos', color: '#06b6d4', keywords: ['investimento', 'aplicacao', 'tesouro'], type: 'expense', isDefault: true },
-  { id: 'salario', name: 'Salário/Entradas', color: '#22c55e', keywords: ['salario', 'beneficio', 'pagamento', 'venda'], type: 'income', isDefault: true },
-  { id: 'outros', name: 'Outros', color: '#64748b', keywords: ['varios', 'outros'], type: 'both', isDefault: true },
-  { id: 'uncategorized', name: 'Sem categoria', color: '#cbd5e1', keywords: [], type: 'both', isDefault: true },
+  { id: 'alimentacao', name: 'Alimentação', color: '#ef4444', keywords: ['uber', 'restaurante', 'mercado', 'padaria', 'delivery'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
+  { id: 'moradia', name: 'Moradia', color: '#f59e0b', keywords: ['aluguel', 'condominio', 'luz', 'água', 'internet'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
+  { id: 'transporte', name: 'Transporte', color: '#3b82f6', keywords: ['uber', 'metro', 'onibus', 'combustivel', 'posto'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
+  { id: 'lazer', name: 'Lazer', color: '#8b5cf6', keywords: ['cinema', 'spotify', 'streaming', 'ingresso'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
+  { id: 'saude', name: 'Saúde', color: '#10b981', keywords: ['farmacia', 'medico', 'consulta', 'dentista'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
+  { id: 'investimentos', name: 'Investimentos', color: '#06b6d4', keywords: ['investimento', 'aplicacao', 'aplicação', 'tesouro', 'aplicação', 'investir'], type: 'expense', isDefault: true, isNeutral: true, excludeFromTotals: true },
+  { id: 'transferencia', name: 'Transferência Entre Contas', color: '#a78bfa', keywords: ['mesma titularidade', 'pix enviado', 'pix enviado - sofisa', 'transferencia', 'transferência', 'mesma titularidade', 'sofisa', 'inter', 'bb', 'picpay', 'conta propria', 'entre contas'], type: 'both', isDefault: true, isNeutral: true, excludeFromTotals: true },
+  { id: 'pagamento_fatura', name: 'Pagamento de Fatura', color: '#f97316', keywords: ['pagamento de fatura', 'pgto fatura', 'fatura', 'invoice', 'payment'], type: 'expense', isDefault: true, isNeutral: true, excludeFromTotals: true },
+  { id: 'salario', name: 'Salário/Entradas', color: '#22c55e', keywords: ['salario', 'beneficio', 'pagamento', 'venda'], type: 'income', isDefault: true, isNeutral: false, excludeFromTotals: false },
+  { id: 'outros', name: 'Outros', color: '#64748b', keywords: ['varios', 'outros'], type: 'both', isDefault: true, isNeutral: false, excludeFromTotals: false },
+  { id: 'uncategorized', name: 'Sem categoria', color: '#cbd5e1', keywords: [], type: 'both', isDefault: true, isNeutral: false, excludeFromTotals: false },
 ];
 
 const readStorage = (): { transactions: Transaction[]; categories: Category[] } => {
@@ -109,16 +111,24 @@ export const useTransactions = () => {
   };
 
   const dashboardSummary = useMemo<DashboardSummary>(() => {
-    const income = transactions
+    const getCategoryMeta = (tx: Transaction) => categories.find((category) => category.id === tx.categoryId);
+
+    const activeTransactions = transactions.filter((tx) => !getCategoryMeta(tx)?.isNeutral && !getCategoryMeta(tx)?.excludeFromTotals);
+
+    const income = activeTransactions
       .filter((tx) => tx.type === 'income')
       .reduce((sum, tx) => sum + tx.amount, 0);
 
-    const expenses = transactions
+    const expenses = activeTransactions
       .filter((tx) => tx.type === 'expense')
       .reduce((sum, tx) => sum + tx.amount, 0);
 
+    const neutralTotal = transactions
+      .filter((tx) => getCategoryMeta(tx)?.isNeutral || getCategoryMeta(tx)?.excludeFromTotals)
+      .reduce((sum, tx) => sum + tx.amount, 0);
+
     const balance = income - expenses;
-    const averageExpense = expenses > 0 ? expenses / Math.max(1, transactions.filter((tx) => tx.type === 'expense').length) : 0;
+    const averageExpense = expenses > 0 ? expenses / Math.max(1, activeTransactions.filter((tx) => tx.type === 'expense').length) : 0;
 
     return {
       balance,
@@ -126,8 +136,9 @@ export const useTransactions = () => {
       expenses,
       averageExpense,
       monthCount: new Set(transactions.map((tx) => tx.date.slice(0, 7))).size,
+      neutralTotal,
     };
-  }, [transactions]);
+  }, [categories, transactions]);
 
   const updateTransactionCategory = (transactionId: string, categoryId: string) => {
     setTransactions((prev) =>
