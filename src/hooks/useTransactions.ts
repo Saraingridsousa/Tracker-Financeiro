@@ -5,15 +5,30 @@ import type { BackupPayload, Category, DashboardSummary, Rule, Transaction } fro
 const STORAGE_KEY = 'tracker-financeiro:data';
 const RULES_KEY = 'tracker-financeiro:rules';
 
+const normalizeImportText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const buildTransactionFingerprint = (transaction: Pick<Transaction, 'date' | 'description' | 'amount' | 'type'>) => {
+  const normalized = normalizeImportText(`${transaction.date}|${transaction.description}|${Math.abs(transaction.amount).toFixed(2)}|${transaction.type}`);
+  return normalized;
+};
+
 const defaultCategories: Category[] = [
   { id: 'alimentacao', name: 'Alimentação', color: '#ef4444', keywords: ['uber', 'restaurante', 'mercado', 'padaria', 'delivery'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'moradia', name: 'Moradia', color: '#f59e0b', keywords: ['aluguel', 'condominio', 'luz', 'água', 'internet'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'transporte', name: 'Transporte', color: '#3b82f6', keywords: ['uber', 'metro', 'onibus', 'combustivel', 'posto'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'lazer', name: 'Lazer', color: '#8b5cf6', keywords: ['cinema', 'spotify', 'streaming', 'ingresso'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'saude', name: 'Saúde', color: '#10b981', keywords: ['farmacia', 'medico', 'consulta', 'dentista'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'investimentos', name: 'Investimentos', color: '#06b6d4', keywords: ['investimento', 'aplicacao', 'aplicação', 'tesouro', 'aplicação', 'investir'], type: 'expense', isDefault: true, isNeutral: true, excludeFromTotals: true },
-  { id: 'transferencia', name: 'Transferência Entre Contas', color: '#a78bfa', keywords: ['mesma titularidade', 'pix enviado', 'pix enviado - sofisa', 'transferencia', 'transferência', 'mesma titularidade', 'sofisa', 'inter', 'bb', 'picpay', 'conta propria', 'entre contas'], type: 'both', isDefault: true, isNeutral: true, excludeFromTotals: true },
-  { id: 'pagamento_fatura', name: 'Pagamento de Fatura', color: '#f97316', keywords: ['pagamento de fatura', 'pgto fatura', 'fatura', 'invoice', 'payment'], type: 'expense', isDefault: true, isNeutral: true, excludeFromTotals: true },
+  { id: 'investimentos', name: 'Investimentos', color: '#06b6d4', keywords: ['investimento', 'aplicacao', 'aplicação', 'resgate', 'cdb', 'lci', 'debito online td', 'debito online t/d', 'selic', 'tesouro', 'investir'], type: 'expense', isDefault: true, isNeutral: true, excludeFromTotals: true },
+  { id: 'transferencia', name: 'Transferência Entre Contas', color: '#a78bfa', keywords: ['sara ingrid', 'sara i s o afonso', 'sara afonso', 'pix recebido', 'pix enviado', 'recebimento de transferencia', 'recebimento de transferência', 'envio de transferencia', 'envio de transferência', 'mesma titularidade', 'conta propria', 'entre contas'], type: 'both', isDefault: true, isNeutral: true, excludeFromTotals: true },
+  { id: 'pagamento_fatura', name: 'Pagamento de Fatura', color: '#f97316', keywords: ['pagamento de fatura', 'pagamento fatura cartao', 'pagamento efetuado pagamento fatura', 'pgto fatura', 'fatura', 'invoice', 'payment'], type: 'expense', isDefault: true, isNeutral: true, excludeFromTotals: true },
+  { id: 'proventos', name: 'Receitas / Proventos e Dividendos', color: '#22c55e', keywords: ['prov rendimento', 'prov dividendos', 'prov juros s capital', 'credito evento b3', 'crédito evento b3', 'dividendos', 'juros sobre capital'], type: 'income', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'salario', name: 'Salário/Entradas', color: '#22c55e', keywords: ['salario', 'beneficio', 'pagamento', 'venda'], type: 'income', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'outros', name: 'Outros', color: '#64748b', keywords: ['varios', 'outros'], type: 'both', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'uncategorized', name: 'Sem categoria', color: '#cbd5e1', keywords: [], type: 'both', isDefault: true, isNeutral: false, excludeFromTotals: false },
@@ -80,10 +95,14 @@ export const useTransactions = () => {
   const addTransactions = (incoming: Transaction[]) => {
     setTransactions((prev) => {
       const map = new Map(prev.map((item) => [item.id, item]));
+      const seenFingerprints = new Set(prev.map((item) => buildTransactionFingerprint(item)));
 
       incoming.forEach((item) => {
-        if (!map.has(item.id)) {
+        const fingerprint = buildTransactionFingerprint(item);
+
+        if (!seenFingerprints.has(fingerprint) && !map.has(item.id)) {
           map.set(item.id, item);
+          seenFingerprints.add(fingerprint);
         }
       });
 
@@ -122,10 +141,42 @@ export const useTransactions = () => {
   };
 
   const inferCategory = (description: string): string => {
-    const normalized = description.toLowerCase();
+    const normalized = normalizeImportText(description);
+
+    const specificRules = [
+      {
+        categoryId: 'transferencia',
+        match: new RegExp(
+          '((sara ingrid|sara i s o afonso|sara afonso).*(pix recebido|pix enviado|recebimento de transferencia|envio de transferencia))|((pix recebido|pix enviado|recebimento de transferencia|envio de transferencia).*(sara ingrid|sara i s o afonso|sara afonso))',
+          'i',
+        ),
+      },
+      {
+        categoryId: 'pagamento_fatura',
+        match: new RegExp('(pagamento fatura cartao|pagamento efetuado pagamento fatura|pagamento de fatura|pgto fatura)', 'i'),
+      },
+      {
+        categoryId: 'investimentos',
+        match: new RegExp('(aplicacao|resgate|cdb|lci|debito online td|debito online t d|selic|tesouro)', 'i'),
+      },
+      {
+        categoryId: 'proventos',
+        match: new RegExp('(prov rendimento|prov dividendos|prov juros s capital|credito evento b3|dividendos|juros sobre capital)', 'i'),
+      },
+    ];
+
+    for (const rule of specificRules) {
+      if (rule.match.test(normalized)) {
+        return rule.categoryId;
+      }
+    }
 
     for (const category of categories) {
-      const matched = category.keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
+      const matched = category.keywords.some((keyword) => {
+        const cleanedKeyword = normalizeImportText(keyword);
+        return cleanedKeyword.length > 0 && normalized.includes(cleanedKeyword);
+      });
+
       if (matched) {
         return category.id;
       }
