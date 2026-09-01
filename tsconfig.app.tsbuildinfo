@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/hooks/usetransactions.ts","./src/lib/parsebankfile.ts","./src/types/finance.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/categorypiechart.tsx","./src/components/monthlybarchart.tsx","./src/components/transactiontable.tsx","./src/hooks/usetransactions.ts","./src/lib/parsebankfile.ts","./src/types/finance.ts"],"version":"5.9.3"}

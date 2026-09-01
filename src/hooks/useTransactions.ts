@@ -129,6 +129,16 @@ export const useTransactions = () => {
     };
   }, [transactions]);
 
+  const updateTransactionCategory = (transactionId: string, categoryId: string) => {
+    setTransactions((prev) =>
+      prev.map((transaction) =>
+        transaction.id === transactionId
+          ? { ...transaction, categoryId, updatedAt: new Date().toISOString() }
+          : transaction,
+      ),
+    );
+  };
+
   return {
     transactions,
     categories,
@@ -139,5 +149,6 @@ export const useTransactions = () => {
     inferCategory,
     dashboardSummary,
     setTransactions,
+    updateTransactionCategory,
   };
 };
