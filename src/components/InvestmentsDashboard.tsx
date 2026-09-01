@@ -284,26 +284,30 @@ export function InvestmentsDashboard({
                   <button
                     type="button"
                     onClick={() => toggleExpanded(type)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                    className="grid w-full grid-cols-[auto_minmax(0,1fr)_minmax(80px,110px)_24px] items-center gap-4 px-4 py-3 text-left"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="rounded-xl p-2" style={{ backgroundColor: `${assetTypeMeta[type].color}22` }}>
                         <Icon className="h-4 w-4" style={{ color: assetTypeMeta[type].color }} />
                       </div>
-                      <div>
-                        <div className="text-sm font-medium text-slate-800 dark:text-slate-100">{type}</div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{type}</div>
                         <div className="text-xs text-slate-500 dark:text-slate-400">{item.count} ativos</div>
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="hidden sm:block" />
+
+                    <div className="text-right justify-self-end">
                       <div className="text-sm font-medium text-slate-800 dark:text-slate-100">{formatCurrency(item.value)}</div>
                       <div className={`text-xs ${item.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         {formatPercent(item.profitPercent)}
                       </div>
                     </div>
 
-                    {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+                    <div className="flex w-6 justify-end">
+                      {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+                    </div>
                   </button>
 
                   {isExpanded && (
