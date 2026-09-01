@@ -5,18 +5,21 @@ import {
   FileText,
   Filter,
   Moon,
+  Plus,
+  Settings,
   Sun,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { CategoryPieChart } from './components/CategoryPieChart';
 import { MonthlyBarChart } from './components/MonthlyBarChart';
 import { TransactionTable } from './components/TransactionTable';
 import { parseBankFile } from './lib/parseBankFile';
 import { useTransactions } from './hooks/useTransactions';
-import type { Category, Transaction, TransactionType } from './types/finance';
+import type { BackupPayload, Category, Transaction } from './types/finance';
 
 const toneStyles = {
   emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
@@ -112,38 +115,32 @@ const buildCategoryData = (items: Transaction[], categories: Category[]) => {
     .slice(0, 6);
 };
 
-const createDemoTransactions = (): Transaction[] => {
-  const today = new Date();
-  const base: Omit<Transaction, 'createdAt'>[] = [
-    { id: 'demo-1', date: new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10), description: 'Salário', amount: 4200, type: 'income', categoryId: 'salario', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-2', date: new Date(today.getFullYear(), today.getMonth(), 3).toISOString().slice(0, 10), description: 'Mercado', amount: 420, type: 'expense', categoryId: 'alimentacao', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-3', date: new Date(today.getFullYear(), today.getMonth(), 6).toISOString().slice(0, 10), description: 'Aluguel', amount: 1850, type: 'expense', categoryId: 'moradia', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-4', date: new Date(today.getFullYear(), today.getMonth(), 8).toISOString().slice(0, 10), description: 'Uber', amount: 95, type: 'expense', categoryId: 'transporte', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-5', date: new Date(today.getFullYear(), today.getMonth(), 10).toISOString().slice(0, 10), description: 'Netflix', amount: 49.9, type: 'expense', categoryId: 'lazer', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-6', date: new Date(today.getFullYear(), today.getMonth(), 12).toISOString().slice(0, 10), description: 'Consulta médica', amount: 180, type: 'expense', categoryId: 'saude', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-7', date: new Date(today.getFullYear(), today.getMonth(), 15).toISOString().slice(0, 10), description: 'Freelance', amount: 1100, type: 'income', categoryId: 'salario', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-8', date: new Date(today.getFullYear(), today.getMonth() - 1, 2).toISOString().slice(0, 10), description: 'Supermercado', amount: 560, type: 'expense', categoryId: 'alimentacao', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-9', date: new Date(today.getFullYear(), today.getMonth() - 1, 7).toISOString().slice(0, 10), description: 'Investimento Tesouro', amount: 700, type: 'expense', categoryId: 'investimentos', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-10', date: new Date(today.getFullYear(), today.getMonth() - 2, 5).toISOString().slice(0, 10), description: 'Salário', amount: 4200, type: 'income', categoryId: 'salario', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-11', date: new Date(today.getFullYear(), today.getMonth() - 2, 12).toISOString().slice(0, 10), description: 'Cinema', amount: 85, type: 'expense', categoryId: 'lazer', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-12', date: new Date(today.getFullYear(), today.getMonth() - 3, 9).toISOString().slice(0, 10), description: 'Abastecimento', amount: 180, type: 'expense', categoryId: 'transporte', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-13', date: new Date(today.getFullYear(), today.getMonth(), 14).toISOString().slice(0, 10), description: 'Pix Enviado - Sofisa', amount: 320, type: 'expense', categoryId: 'transferencia', source: 'manual', bankName: 'Demo' },
-    { id: 'demo-14', date: new Date(today.getFullYear(), today.getMonth(), 18).toISOString().slice(0, 10), description: 'Pagamento de Fatura', amount: 420, type: 'expense', categoryId: 'pagamento_fatura', source: 'manual', bankName: 'Demo' },
-  ];
-
-  return base.map((item) => ({
-    ...item,
-    createdAt: new Date().toISOString(),
-  }));
-};
-
 function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<(typeof periodOptions)[number]['value']>('month');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const { transactions, categories, addTransactions, inferCategory, setTransactions, updateTransactionCategory } = useTransactions();
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+  const {
+    transactions,
+    categories,
+    rules,
+    addTransactions,
+    inferCategory,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    addRule,
+    deleteRule,
+    updateTransactionCategory,
+    resetAllData,
+    importBackup,
+    exportBackup,
+  } = useTransactions();
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem('tracker-theme');
@@ -157,10 +154,11 @@ function App() {
     window.localStorage.setItem('tracker-theme', theme);
   }, [theme]);
 
-  const filteredTransactions = useMemo(
-    () => filterTransactionsByPeriod(transactions, selectedPeriod),
-    [transactions, selectedPeriod],
-  );
+  const filteredTransactions = useMemo(() => {
+    const periodTransactions = filterTransactionsByPeriod(transactions, selectedPeriod);
+    if (selectedCategoryFilter === 'all') return periodTransactions;
+    return periodTransactions.filter((transaction) => transaction.categoryId === selectedCategoryFilter);
+  }, [transactions, selectedPeriod, selectedCategoryFilter]);
 
   const summary = useMemo(() => {
     const totalIncome = filteredTransactions
@@ -234,8 +232,33 @@ function App() {
     }
   };
 
-  const loadDemoData = () => {
-    setTransactions(createDemoTransactions());
+  const exportBackupFile = () => {
+    const payload = exportBackup();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `tracker-financeiro-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importBackupFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const payload = JSON.parse(text) as BackupPayload;
+    importBackup(payload);
+    event.target.value = '';
+  };
+
+  const clearAllData = () => {
+    if (!window.confirm('Tem certeza que deseja limpar todos os dados? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    resetAllData();
   };
 
   return (
@@ -275,10 +298,67 @@ function App() {
 
               <button
                 type="button"
+                onClick={() => setShowCategoryManager(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                Categorias
+              </button>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsMenu((current) => !current)}
+                  className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  aria-label="Abrir configurações"
+                  aria-expanded={showSettingsMenu}
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+
+                {showSettingsMenu && (
+                  <div className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        exportBackupFile();
+                        setShowSettingsMenu(false);
+                      }}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <span>Fazer backup dos dados (.json)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        backupInputRef.current?.click();
+                        setShowSettingsMenu(false);
+                      }}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <span>Restaurar backup (.json)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAllData();
+                        setShowSettingsMenu(false);
+                      }}
+                      className="flex w-full items-center justify-between border-t border-slate-200 px-4 py-3 text-left text-sm text-rose-600 transition hover:bg-rose-50 dark:border-slate-700 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                    >
+                      <span>Limpar todos os dados</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-400"
               >
-                <Download className="h-4 w-4" />
+                <Plus className="h-4 w-4" />
                 Importar extrato
               </button>
               <input
@@ -289,51 +369,69 @@ function App() {
                 hidden
                 onChange={(event) => handleFiles(event.target.files)}
               />
+              <input
+                ref={backupInputRef}
+                type="file"
+                accept=".json,application/json"
+                hidden
+                onChange={importBackupFile}
+              />
             </div>
           </div>
         </header>
 
-        <section
-          className={`mb-8 rounded-2xl border-2 border-dashed p-6 transition ${
-            isDragging ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70'
-          }`}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setIsDragging(false);
-            handleFiles(event.dataTransfer.files);
-          }}
-        >
-          <div className="flex flex-col items-center justify-center gap-3 text-center">
-            <div className="rounded-full bg-cyan-500/10 p-3 text-cyan-600 dark:bg-slate-800 dark:text-cyan-400">
-              <FileText className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Arraste seus extratos aqui</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Arquivos .CSV e .OFX ficam 100% no navegador.</p>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+        {transactions.length === 0 ? (
+          <section
+            className={`mb-8 rounded-2xl border-2 border-dashed p-8 transition ${
+              isDragging ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70'
+            }`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+              handleFiles(event.dataTransfer.files);
+            }}
+          >
+            <div className="flex flex-col items-center justify-center gap-4 text-center">
+              <div className="rounded-full bg-cyan-500/10 p-4 text-cyan-600 dark:bg-slate-800 dark:text-cyan-400">
+                <FileText className="h-8 w-8" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Seu painel está limpo</h2>
+                <p className="mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+                  Comece importando um extrato .CSV ou .OFX para visualizar seus gastos, receitas e categorias em tempo real.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-medium text-slate-950 hover:bg-cyan-400"
+              >
+                {isImporting ? 'Importando...' : 'Importar primeiro extrato'}
+              </button>
+            </div>
+          </section>
+        ) : (
+          <section className="mb-8 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Importar extrato</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Adicione mais arquivos sem perder os dados já cadastrados.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
                 {isImporting ? 'Importando...' : 'Selecionar arquivos'}
               </button>
-              <button
-                type="button"
-                onClick={loadDemoData}
-                className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-              >
-                Carregar dados de exemplo
-              </button>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
@@ -394,13 +492,47 @@ function App() {
         </section>
 
         <div className="mt-8">
-          <TransactionTable
-            transactions={filteredTransactions}
-            categories={categories}
-            onUpdateCategory={(transactionId, categoryId) => updateTransactionCategory(transactionId, categoryId)}
-          />
+          {transactions.length > 0 ? (
+            <>
+              <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-1 items-center gap-3">
+                  <label className="text-sm text-slate-600 dark:text-slate-300">Filtrar por categoria</label>
+                  <select
+                    value={selectedCategoryFilter}
+                    onChange={(event) => setSelectedCategoryFilter(event.target.value)}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  >
+                    <option value="all">Todas</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <TransactionTable
+                transactions={filteredTransactions}
+                categories={categories}
+                onUpdateCategory={(transactionId, categoryId) => updateTransactionCategory(transactionId, categoryId)}
+              />
+            </>
+          ) : null}
         </div>
       </div>
+
+      <CategoryManagerModal
+        open={showCategoryManager}
+        categories={categories}
+        rules={rules}
+        onClose={() => setShowCategoryManager(false)}
+        onCreateCategory={addCategory}
+        onUpdateCategory={updateCategory}
+        onDeleteCategory={deleteCategory}
+        onAddRule={addRule}
+        onDeleteRule={deleteRule}
+      />
     </div>
   );
 }

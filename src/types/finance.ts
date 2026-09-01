@@ -34,6 +34,13 @@ export interface Rule {
   isActive: boolean;
 }
 
+export interface BackupPayload {
+  transactions: Transaction[];
+  categories: Category[];
+  rules: Rule[];
+  exportedAt: string;
+}
+
 export interface DashboardSummary {
   balance: number;
   income: number;

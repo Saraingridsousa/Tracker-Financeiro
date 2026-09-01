@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { Category, DashboardSummary, Transaction } from '../types/finance';
+import type { BackupPayload, Category, DashboardSummary, Rule, Transaction } from '../types/finance';
 
 const STORAGE_KEY = 'tracker-financeiro:data';
+const RULES_KEY = 'tracker-financeiro:rules';
 
 const defaultCategories: Category[] = [
   { id: 'alimentacao', name: 'Alimentação', color: '#ef4444', keywords: ['uber', 'restaurante', 'mercado', 'padaria', 'delivery'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
@@ -39,19 +40,42 @@ const readStorage = (): { transactions: Transaction[]; categories: Category[] } 
   }
 };
 
+const readRules = (): Rule[] => {
+  if (typeof window === 'undefined') return [];
+
+  const raw = window.localStorage.getItem(RULES_KEY);
+  if (!raw) return [];
+
+  try {
+    return JSON.parse(raw) as Rule[];
+  } catch {
+    return [];
+  }
+};
+
 const persist = (transactions: Transaction[], categories: Category[]) => {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ transactions, categories }));
+};
+
+const persistRules = (rules: Rule[]) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(RULES_KEY, JSON.stringify(rules));
 };
 
 export const useTransactions = () => {
   const initialData = readStorage();
   const [transactions, setTransactions] = useState<Transaction[]>(initialData.transactions);
   const [categories, setCategories] = useState<Category[]>(initialData.categories);
+  const [rules, setRules] = useState<Rule[]>(readRules());
 
   useEffect(() => {
     persist(transactions, categories);
   }, [transactions, categories]);
+
+  useEffect(() => {
+    persistRules(rules);
+  }, [rules]);
 
   const addTransactions = (incoming: Transaction[]) => {
     setTransactions((prev) => {
@@ -150,9 +174,49 @@ export const useTransactions = () => {
     );
   };
 
+  const addRule = (rule: Omit<Rule, 'id'> & { id?: string }) => {
+    const nextRule: Rule = {
+      id: rule.id ?? crypto.randomUUID(),
+      categoryId: rule.categoryId,
+      keywords: rule.keywords ?? [],
+      isActive: rule.isActive ?? true,
+    };
+
+    setRules((prev) => [...prev, nextRule]);
+    return nextRule;
+  };
+
+  const deleteRule = (ruleId: string) => {
+    setRules((prev) => prev.filter((rule) => rule.id !== ruleId));
+  };
+
+  const resetAllData = () => {
+    setTransactions([]);
+    setCategories(defaultCategories);
+    setRules([]);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(RULES_KEY);
+    }
+  };
+
+  const importBackup = (payload: BackupPayload) => {
+    setTransactions(payload.transactions ?? []);
+    setCategories(payload.categories?.length ? payload.categories : defaultCategories);
+    setRules(payload.rules ?? []);
+  };
+
+  const exportBackup = (): BackupPayload => ({
+    transactions,
+    categories,
+    rules,
+    exportedAt: new Date().toISOString(),
+  });
+
   return {
     transactions,
     categories,
+    rules,
     addTransactions,
     addCategory,
     updateCategory,
@@ -161,5 +225,10 @@ export const useTransactions = () => {
     dashboardSummary,
     setTransactions,
     updateTransactionCategory,
+    addRule,
+    deleteRule,
+    resetAllData,
+    importBackup,
+    exportBackup,
   };
 };
