@@ -14,6 +14,26 @@ const normalizeImportText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const classifyTransactionFlags = (transaction: Transaction): Transaction => {
+  const normalized = normalizeImportText(transaction.description);
+  const isSelfTransferPattern = /(sara ingrid|sara i s o afonso|sara afonso|sara ingrid sousa|sara sousa|cp\s*:\s*\d{7,8}|pix (recebido|enviado).*sara|recebimento de transfer.*via pix.*sara|envio de transfer.*via pix.*sara|para sara|de sara|sara\b)/i.test(normalized);
+  const isInternalTransfer = /(pix|ted|transferencia|transferência|conta propria|conta própria|mesma titularidade|entre contas)/i.test(normalized);
+  const isSelfTransfer = isInternalTransfer && isSelfTransferPattern;
+  const isInvestment = /(cdb|lci|tesouro|selic|b3|aplicacao|aplicação|resgate|vencimento|investimento|dividendos|juros sobre capital)/i.test(normalized);
+  const isCreditCardPayment = /(pagamento on line|pagamento online|pagamento fatura cartao|pagamento de fatura|pagamento efetuado.*pagamento fatura|pagamento efetuado: pagamento fatura)/i.test(normalized);
+  const isNeutral = isInternalTransfer || isInvestment || isCreditCardPayment || isSelfTransfer;
+
+  return {
+    ...transaction,
+    isInternalTransfer: isInternalTransfer || isSelfTransfer,
+    isSelfTransfer,
+    isInvestment: isInvestment && !isInternalTransfer,
+    isCreditCardPayment,
+    isNeutral,
+    category: isCreditCardPayment ? 'Pagamento de Fatura' : transaction.category,
+  };
+};
+
 const buildTransactionFingerprint = (transaction: Pick<Transaction, 'date' | 'description' | 'amount' | 'type'>) => {
   const normalized = normalizeImportText(`${transaction.date}|${transaction.description}|${Math.abs(transaction.amount).toFixed(2)}|${transaction.type}`);
   return normalized;
@@ -47,7 +67,7 @@ const readStorage = (): { transactions: Transaction[]; categories: Category[] } 
   try {
     const parsed = JSON.parse(raw) as { transactions?: Transaction[]; categories?: Category[] };
     return {
-      transactions: parsed.transactions ?? [],
+      transactions: sortTransactionsByDateDesc((parsed.transactions ?? []).map(classifyTransactionFlags)),
       categories: parsed.categories?.length ? parsed.categories : defaultCategories,
     };
   } catch {
@@ -78,9 +98,16 @@ const persistRules = (rules: Rule[]) => {
   window.localStorage.setItem(RULES_KEY, JSON.stringify(rules));
 };
 
+const sortTransactionsByDateDesc = (items: Transaction[]) =>
+  [...items].sort((a, b) => {
+    const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+    if (dateDiff !== 0) return dateDiff;
+    return (a.id ?? '').localeCompare(b.id ?? '');
+  });
+
 export const useTransactions = () => {
   const initialData = readStorage();
-  const [transactions, setTransactions] = useState<Transaction[]>(initialData.transactions);
+  const [transactions, setTransactions] = useState<Transaction[]>(sortTransactionsByDateDesc(initialData.transactions));
   const [categories, setCategories] = useState<Category[]>(initialData.categories);
   const [rules, setRules] = useState<Rule[]>(readRules());
 
@@ -94,10 +121,11 @@ export const useTransactions = () => {
 
   const addTransactions = (incoming: Transaction[]) => {
     setTransactions((prev) => {
-      const map = new Map(prev.map((item) => [item.id, item]));
+      const normalizedIncoming = incoming.map(classifyTransactionFlags);
+      const map = new Map(prev.map((item) => [item.id, classifyTransactionFlags(item)]));
       const seenFingerprints = new Set(prev.map((item) => buildTransactionFingerprint(item)));
 
-      incoming.forEach((item) => {
+      normalizedIncoming.forEach((item) => {
         const fingerprint = buildTransactionFingerprint(item);
 
         if (!seenFingerprints.has(fingerprint) && !map.has(item.id)) {
@@ -106,7 +134,7 @@ export const useTransactions = () => {
         }
       });
 
-      return Array.from(map.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      return sortTransactionsByDateDesc(Array.from(map.values()));
     });
   };
 
@@ -153,7 +181,7 @@ export const useTransactions = () => {
       },
       {
         categoryId: 'pagamento_fatura',
-        match: new RegExp('(pagamento fatura cartao|pagamento efetuado pagamento fatura|pagamento de fatura|pgto fatura)', 'i'),
+        match: new RegExp('(pagamento fatura cartao|pagamento efetuado.*pagamento fatura|pagamento de fatura|pgto fatura)', 'i'),
       },
       {
         categoryId: 'investimentos',
@@ -188,7 +216,19 @@ export const useTransactions = () => {
   const dashboardSummary = useMemo<DashboardSummary>(() => {
     const getCategoryMeta = (tx: Transaction) => categories.find((category) => category.id === tx.categoryId);
 
-    const activeTransactions = transactions.filter((tx) => !getCategoryMeta(tx)?.isNeutral && !getCategoryMeta(tx)?.excludeFromTotals);
+    const activeTransactions = transactions.filter((tx) => {
+      const categoryMeta = getCategoryMeta(tx);
+      const isExcluded =
+        tx.isCreditCardPayment ||
+        tx.isInternalTransfer ||
+        tx.isInvestment ||
+        tx.isNeutral ||
+        categoryMeta?.isNeutral ||
+        categoryMeta?.excludeFromTotals ||
+        tx.categoryId === 'pagamento_fatura';
+
+      return !isExcluded;
+    });
 
     const income = activeTransactions
       .filter((tx) => tx.type === 'income')
@@ -199,8 +239,27 @@ export const useTransactions = () => {
       .reduce((sum, tx) => sum + tx.amount, 0);
 
     const neutralTotal = transactions
-      .filter((tx) => getCategoryMeta(tx)?.isNeutral || getCategoryMeta(tx)?.excludeFromTotals)
+      .filter((tx) => {
+        const categoryMeta = getCategoryMeta(tx);
+        return (
+          tx.isNeutral ||
+          tx.isCreditCardPayment ||
+          tx.isInternalTransfer ||
+          tx.isInvestment ||
+          categoryMeta?.isNeutral ||
+          categoryMeta?.excludeFromTotals ||
+          tx.categoryId === 'pagamento_fatura'
+        );
+      })
       .reduce((sum, tx) => sum + tx.amount, 0);
+
+    const totalInvested = transactions
+      .filter((tx) => !tx.isInternalTransfer && tx.isInvestment)
+      .reduce((sum, tx) => {
+        if (tx.type === 'expense') return sum + tx.amount;
+        if (tx.type === 'income') return sum - tx.amount;
+        return sum;
+      }, 0);
 
     const balance = income - expenses;
     const averageExpense = expenses > 0 ? expenses / Math.max(1, activeTransactions.filter((tx) => tx.type === 'expense').length) : 0;
@@ -212,6 +271,7 @@ export const useTransactions = () => {
       averageExpense,
       monthCount: new Set(transactions.map((tx) => tx.date.slice(0, 7))).size,
       neutralTotal,
+      totalInvested,
     };
   }, [categories, transactions]);
 
@@ -252,7 +312,7 @@ export const useTransactions = () => {
   };
 
   const importBackup = (payload: BackupPayload) => {
-    setTransactions(payload.transactions ?? []);
+    setTransactions(sortTransactionsByDateDesc(payload.transactions ?? []));
     setCategories(payload.categories?.length ? payload.categories : defaultCategories);
     setRules(payload.rules ?? []);
   };

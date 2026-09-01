@@ -35,6 +35,7 @@ const toneStyles = {
 
 const periodOptions = [
   { value: 'month', label: 'Mês atual' },
+  { value: 'last2months', label: 'Últimos 2 meses' },
   { value: 'quarter', label: 'Últimos 3 meses' },
   { value: 'semester', label: 'Semestre' },
   { value: 'year', label: 'Ano' },
@@ -46,6 +47,29 @@ const formatCurrency = (value: number) =>
     style: 'currency',
     currency: 'BRL',
   }).format(value);
+
+const parseISODate = (value: string) => {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatBrazilianDate = (value: string) => {
+  if (!value) return '';
+
+  const isoValue = value.split('T')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoValue)) {
+    const [year, month, day] = isoValue.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 const getMonthLabel = (date: Date) =>
   new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(date).replace('.', '');
@@ -61,6 +85,10 @@ const filterTransactionsByPeriod = (items: Transaction[], period: (typeof period
     startDate.setMonth(currentMonth.getMonth());
   }
 
+  if (period === 'last2months') {
+    startDate.setMonth(currentMonth.getMonth() - 1);
+  }
+
   if (period === 'quarter') {
     startDate.setMonth(currentMonth.getMonth() - 2);
   }
@@ -73,14 +101,14 @@ const filterTransactionsByPeriod = (items: Transaction[], period: (typeof period
     startDate.setFullYear(currentMonth.getFullYear() - 1);
   }
 
-  return items.filter((item) => new Date(item.date) >= startDate);
+  return items.filter((item) => parseISODate(item.date) >= startDate);
 };
 
 const buildMonthlyData = (items: Transaction[]) => {
   const grouped = new Map<string, { income: number; expense: number; month: string }>();
 
   items.forEach((item) => {
-    const date = new Date(item.date);
+    const date = parseISODate(item.date);
     const key = `${date.getFullYear()}-${date.getMonth()}`;
     const label = getMonthLabel(date);
 
@@ -100,11 +128,23 @@ const buildMonthlyData = (items: Transaction[]) => {
   });
 };
 
+const getRealExpenseTransactions = (items: Transaction[]) =>
+  items.filter(
+    (transaction) =>
+      (transaction.type === 'expense' || transaction.amount < 0) &&
+      !transaction.isNeutral &&
+      !transaction.isInternalTransfer &&
+      !transaction.isSelfTransfer &&
+      !transaction.isInvestment &&
+      !transaction.isCreditCardPayment &&
+      transaction.category !== 'Pagamento de Fatura' &&
+      transaction.categoryId !== 'pagamento_fatura',
+  );
+
 const buildCategoryData = (items: Transaction[], categories: Category[]) => {
   const map = new Map<string, number>();
 
-  items.forEach((item) => {
-    if (item.type !== 'expense') return;
+  getRealExpenseTransactions(items).forEach((item) => {
     const category = categories.find((entry) => entry.id === item.categoryId) ?? categories[0];
     map.set(category?.name ?? 'Outros', (map.get(category?.name ?? 'Outros') ?? 0) + item.amount);
   });
@@ -124,7 +164,7 @@ function App() {
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<(typeof periodOptions)[number]['value']>('month');
+  const [selectedPeriod, setSelectedPeriod] = useState<(typeof periodOptions)[number]['value']>('last2months');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -132,6 +172,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'overview' | 'investments'>('overview');
   const transactionsStore = useTransactions();
   const investmentsStore = useInvestments();
+  const { portfolioSummary } = investmentsStore;
   const {
     transactions,
     categories,
@@ -175,19 +216,23 @@ function App() {
   }, [theme]);
 
   const filteredTransactions = useMemo(() => {
-    const periodTransactions = filterTransactionsByPeriod(transactions, selectedPeriod);
+    const periodTransactions = filterTransactionsByPeriod(transactions, selectedPeriod).filter(
+      (transaction) => !transaction.isSelfTransfer && !transaction.isInternalTransfer,
+    );
     if (selectedCategoryFilter === 'all') return periodTransactions;
     return periodTransactions.filter((transaction) => transaction.categoryId === selectedCategoryFilter);
   }, [transactions, selectedPeriod, selectedCategoryFilter]);
+
+  const realExpenses = useMemo(() => getRealExpenseTransactions(filteredTransactions), [filteredTransactions]);
 
   const summary = useMemo(() => {
     const totalIncome = filteredTransactions
       .filter((transaction) => transaction.type === 'income')
       .reduce((sum, item) => sum + item.amount, 0);
 
-    const totalExpense = filteredTransactions
-      .filter((transaction) => transaction.type === 'expense')
-      .reduce((sum, item) => sum + item.amount, 0);
+    const totalExpense = realExpenses.reduce((sum, item) => sum + item.amount, 0);
+
+    const totalInvested = portfolioSummary.totalCurrentValue;
 
     const neutralTotal = filteredTransactions
       .filter((transaction) => {
@@ -202,10 +247,11 @@ function App() {
       expenses: totalExpense,
       averageExpense: totalExpense > 0 ? totalExpense / Math.max(1, filteredTransactions.filter((tx) => tx.type === 'expense').length) : 0,
       neutralTotal,
+      totalInvested,
     };
-  }, [categories, filteredTransactions]);
+  }, [categories, filteredTransactions, portfolioSummary.totalCurrentValue]);
 
-  const monthlyChartData = useMemo(() => buildMonthlyData(filteredTransactions), [filteredTransactions]);
+  const monthlyChartData = useMemo(() => buildMonthlyData(realExpenses), [realExpenses]);
   const categoryChartData = useMemo(() => buildCategoryData(filteredTransactions, categories), [filteredTransactions, categories]);
 
   const topCategoryList = useMemo(
@@ -213,8 +259,8 @@ function App() {
       [...categories]
         .map((category) => ({
           ...category,
-          total: filteredTransactions
-            .filter((tx) => tx.categoryId === category.id && tx.type === 'expense' && !category.isNeutral)
+          total: getRealExpenseTransactions(filteredTransactions)
+            .filter((tx) => tx.categoryId === category.id)
             .reduce((sum, tx) => sum + tx.amount, 0),
         }))
         .filter((item) => item.total > 0)
@@ -222,6 +268,35 @@ function App() {
         .slice(0, 5),
     [categories, filteredTransactions],
   );
+
+  const normalizeImportedCategory = (input?: string) => {
+    if (!input) return null;
+
+    const raw = String(input).trim();
+    if (!raw || raw.toUpperCase() === 'OUTROS') return null;
+
+    const normalized = raw.toUpperCase();
+    const map: Record<string, string> = {
+      SUPERMERCADO: 'Supermercado',
+      MERCADO: 'Supermercado',
+      TRANSPORTE: 'Transporte',
+      RESTAURANTES: 'Alimentação',
+      BARES: 'Alimentação',
+      CULTURA: 'Lazer / Cultura',
+      ENTRETENIMENTO: 'Lazer / Cultura',
+      DROGARIA: 'Saúde',
+      SAUDE: 'Saúde',
+      VESTUARIO: 'Compras',
+      VESTUÁRIO: 'Compras',
+      COMPRAS: 'Compras',
+      SERVICOS: 'Serviços',
+      SERVIÇOS: 'Serviços',
+      ENSINO: 'Educação',
+      LIVRARIAS: 'Educação',
+    };
+
+    return map[normalized] ?? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || !files.length) return;
@@ -234,19 +309,31 @@ function App() {
       for (const file of Array.from(files)) {
         let list: Transaction[] = [];
 
-        if (file.name.toLowerCase().endsWith('.pdf')) {
+        const lowerName = file.name.toLowerCase();
+
+        if (lowerName.endsWith('.pdf')) {
           const { parsePDFStatement } = await import('./utils/pdfParser');
           list = await parsePDFStatement(file);
+        } else if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+          const { parseExcelStatement } = await import('./utils/excelParser');
+          list = await parseExcelStatement(file);
         } else {
           list = await parseBankFile(file);
         }
 
         const normalized = list.map((item) => {
-          const categoryId = inferCategory(item.description);
+          const importedCategory = normalizeImportedCategory(item.category ?? item.categoryName);
+          const fallbackCategoryId = inferCategory(item.description);
+          const resolvedCategoryId =
+            importedCategory && categories.some((category) => category.name.toLowerCase() === importedCategory.toLowerCase())
+              ? categories.find((category) => category.name.toLowerCase() === importedCategory.toLowerCase())?.id ?? fallbackCategoryId
+              : fallbackCategoryId;
+
           return {
             ...item,
-            categoryId,
-            categoryName: categories.find((category) => category.id === categoryId)?.name ?? 'Sem categoria',
+            categoryId: resolvedCategoryId,
+            categoryName: categories.find((category) => category.id === resolvedCategoryId)?.name ?? importedCategory ?? 'Sem categoria',
+            category: importedCategory ?? item.category ?? item.categoryName,
           };
         });
 
@@ -386,12 +473,23 @@ function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        clearAllData();
+                        resetAllData();
+                        setShowSettingsMenu(false);
+                      }}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-amber-600 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                    >
+                      <span>Limpar transações</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetInvestments();
                         setShowSettingsMenu(false);
                       }}
                       className="flex w-full items-center justify-between border-t border-slate-200 px-4 py-3 text-left text-sm text-rose-600 transition hover:bg-rose-50 dark:border-slate-700 dark:text-rose-400 dark:hover:bg-rose-950/40"
                     >
-                      <span>Limpar todos os dados</span>
+                      <span>Limpar carteira e investimentos</span>
                     </button>
                   </div>
                 )}
@@ -409,9 +507,9 @@ function App() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.ofx,.pdf"
+                accept=".ofx,.csv,.pdf,.xlsx,.xls"
                 multiple
-                title="Formatos suportados: .OFX, .CSV, .PDF"
+                title="Formatos suportados: .OFX, .CSV, .PDF, .XLSX"
                 hidden
                 onChange={(event) => handleFiles(event.target.files)}
               />
@@ -477,10 +575,10 @@ function App() {
                   <div>
                     <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Seu painel está limpo</h2>
                     <p className="mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-                      Comece importando um extrato .OFX, .CSV ou .PDF para visualizar seus gastos, receitas e categorias em tempo real.
+                      Comece importando um extrato .OFX, .CSV, .PDF ou .XLSX para visualizar seus gastos, receitas e categorias em tempo real.
                     </p>
                     <p className="mt-2 text-xs font-medium uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                      Formatos suportados: .OFX, .CSV, .PDF
+                      Formatos suportados: .OFX, .CSV, .PDF, .XLSX
                     </p>
                   </div>
                   <button
@@ -498,7 +596,7 @@ function App() {
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Importar extrato</h2>
                     <p className="text-sm text-slate-500 dark:text-slate-400">Adicione mais arquivos sem perder os dados já cadastrados.</p>
-                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Formatos suportados: .OFX, .CSV, .PDF</p>
+                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Formatos suportados: .OFX, .CSV, .PDF, .XLSX</p>
                   </div>
                   <button
                     type="button"
@@ -516,7 +614,7 @@ function App() {
             { label: 'Saldo atual', value: summary.balance, icon: Wallet, tone: 'emerald' },
             { label: 'Entradas', value: summary.income, icon: ArrowUpCircle, tone: 'cyan' },
             { label: 'Saídas', value: summary.expenses, icon: ArrowDownCircle, tone: 'rose' },
-            { label: 'Transfer./Investido', value: summary.neutralTotal, icon: TrendingUp, tone: 'violet' },
+            { label: 'Total Investido', value: summary.totalInvested, icon: TrendingUp, tone: 'violet' },
           ].map(({ label, value, icon: Icon, tone }) => (
             <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
               <div className="flex items-center justify-between">

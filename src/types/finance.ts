@@ -1,6 +1,8 @@
 export type TransactionType = 'income' | 'expense';
 export type AssetType = 'Ações' | 'FIIs' | 'Tesouro Direto' | 'Criptomoedas' | 'ETFs' | 'Renda Fixa' | 'Outros';
 
+export type BankName = 'Inter' | 'Caixa' | 'Sofisa' | 'BB' | 'Outro';
+
 export interface Transaction {
   id: string;
   date: string; // ISO date YYYY-MM-DD
@@ -10,7 +12,16 @@ export interface Transaction {
   categoryId: string;
   categoryName?: string;
   source: 'manual' | 'import';
+  isInternalTransfer?: boolean;
+  isSelfTransfer?: boolean;
+  isInvestment?: boolean;
+  isCreditCardPayment?: boolean;
+  isNeutral?: boolean;
+  category?: string;
+  paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'BANK_TRANSFER' | 'PIX' | 'MANUAL';
+  bank?: BankName;
   bankName?: string;
+  sourceBank?: string;
   rawHash?: string;
   createdAt: string;
   updatedAt?: string;
@@ -81,4 +92,5 @@ export interface DashboardSummary {
   averageExpense: number;
   monthCount: number;
   neutralTotal: number;
+  totalInvested: number;
 }
