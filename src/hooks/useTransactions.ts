@@ -285,6 +285,24 @@ export const useTransactions = () => {
     );
   };
 
+  const updateTransaction = (transactionId: string, updates: Partial<Transaction>) => {
+    setTransactions((prev) =>
+      prev.map((transaction) =>
+        transaction.id === transactionId
+          ? {
+              ...transaction,
+              ...updates,
+              updatedAt: new Date().toISOString(),
+            }
+          : transaction,
+      ),
+    );
+  };
+
+  const deleteTransaction = (transactionId: string) => {
+    setTransactions((prev) => prev.filter((transaction) => transaction.id !== transactionId));
+  };
+
   const addRule = (rule: Omit<Rule, 'id'> & { id?: string }) => {
     const nextRule: Rule = {
       id: rule.id ?? crypto.randomUUID(),
@@ -335,7 +353,9 @@ export const useTransactions = () => {
     inferCategory,
     dashboardSummary,
     setTransactions,
+    updateTransaction,
     updateTransactionCategory,
+    deleteTransaction,
     addRule,
     deleteRule,
     resetAllData,

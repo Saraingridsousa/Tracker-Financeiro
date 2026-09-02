@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 
 import type { Category, Transaction } from '../types/finance';
 
@@ -24,6 +25,8 @@ interface TransactionTableProps {
   transactions: Transaction[];
   categories: Category[];
   onUpdateCategory: (transactionId: string, categoryId: string) => void;
+  onUpdateTransaction: (transactionId: string, updates: Partial<Transaction>) => void;
+  onDeleteTransaction: (transactionId: string) => void;
 }
 
 const pageSize = 8;
@@ -35,14 +38,24 @@ const sortTransactionsByDateDesc = (items: Transaction[]) =>
     return (a.id ?? '').localeCompare(b.id ?? '');
   });
 
-export function TransactionTable({ transactions, categories, onUpdateCategory }: TransactionTableProps) {
+export function TransactionTable({
+  transactions,
+  categories,
+  onUpdateCategory,
+  onUpdateTransaction,
+  onDeleteTransaction,
+}: TransactionTableProps) {
   const [search, setSearch] = useState('');
   const [selectedBank, setSelectedBank] = useState<'all' | 'Inter' | 'Caixa' | 'Sofisa' | 'BB' | 'Outro'>('all');
   const [page, setPage] = useState(1);
+  const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftDescription, setDraftDescription] = useState('');
   const [sortConfig, setSortConfig] = useState<{ field: 'date'; direction: 'asc' | 'desc' }>({
     field: 'date',
     direction: 'desc',
   });
+  const descriptionInputRef = useRef<HTMLInputElement | null>(null);
 
   const bankOptions = useMemo(
     () =>
@@ -103,8 +116,61 @@ export function TransactionTable({ transactions, categories, onUpdateCategory }:
     setPage(Math.min(Math.max(nextPage, 1), totalPages));
   };
 
+  const saveDescription = (transactionId: string, nextValue: string) => {
+    const cleaned = nextValue.trim();
+    if (!cleaned) {
+      setEditingId(null);
+      setDraftDescription('');
+      return;
+    }
+
+    onUpdateTransaction(transactionId, { description: cleaned, updatedAt: new Date().toISOString() });
+    setEditingId(null);
+    setDraftDescription('');
+  };
+
   return (
     <div className="space-y-6">
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-transaction-title">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+            <h3 id="delete-transaction-title" className="text-lg font-semibold text-slate-900 dark:text-white">
+              Excluir transação?
+            </h3>
+            <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+              <p>
+                <span className="font-medium text-slate-800 dark:text-slate-100">Data:</span> {formatBrazilianDate(pendingDelete.date)}
+              </p>
+              <p>
+                <span className="font-medium text-slate-800 dark:text-slate-100">Descrição:</span> {pendingDelete.description}
+              </p>
+              <p>
+                <span className="font-medium text-slate-800 dark:text-slate-100">Valor:</span>{' '}
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingDelete.amount)}
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteTransaction(pendingDelete.id);
+                  setPendingDelete(null);
+                }}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -146,6 +212,7 @@ export function TransactionTable({ transactions, categories, onUpdateCategory }:
                     <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-300">Descrição</th>
                     <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-300">Categoria</th>
                     <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-300">Valor</th>
+                    <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-300">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
@@ -166,7 +233,38 @@ export function TransactionTable({ transactions, categories, onUpdateCategory }:
                           <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{formatBrazilianDate(transaction.date)}</td>
                           <td className="px-4 py-3">
                             <div className="flex flex-col">
-                              <span className="font-medium text-slate-800 dark:text-slate-100">{transaction.description}</span>
+                              {editingId === transaction.id ? (
+                                <input
+                                  ref={descriptionInputRef}
+                                  autoFocus
+                                  value={draftDescription}
+                                  onChange={(event) => setDraftDescription(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                      event.preventDefault();
+                                      saveDescription(transaction.id, draftDescription);
+                                    }
+                                    if (event.key === 'Escape') {
+                                      event.preventDefault();
+                                      setEditingId(null);
+                                      setDraftDescription('');
+                                    }
+                                  }}
+                                  onBlur={() => saveDescription(transaction.id, draftDescription)}
+                                  className="w-full rounded-lg border border-cyan-400 bg-white px-2 py-1 text-sm text-slate-800 outline-none dark:bg-slate-950 dark:text-slate-100"
+                                />
+                              ) : (
+                                <span
+                                  title="Duplo clique para editar descrição"
+                                  className="cursor-text font-medium text-slate-800 dark:text-slate-100"
+                                  onDoubleClick={() => {
+                                    setEditingId(transaction.id);
+                                    setDraftDescription(transaction.description);
+                                  }}
+                                >
+                                  {transaction.description}
+                                </span>
+                              )}
                               <div className="mt-1 flex flex-wrap items-center gap-2">
                                 <span className="text-xs text-slate-500 dark:text-slate-400">{transaction.type === 'income' ? 'Entrada' : 'Saída'}</span>
                                 <span
@@ -219,12 +317,23 @@ export function TransactionTable({ transactions, categories, onUpdateCategory }:
                               </span>
                             </div>
                           </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              title="Excluir transação"
+                              onClick={() => setPendingDelete(transaction)}
+                              className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400 dark:hover:border-red-800 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                              aria-label={`Excluir transação ${transaction.description}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
                         Nenhuma transação encontrada.
                       </td>
                     </tr>

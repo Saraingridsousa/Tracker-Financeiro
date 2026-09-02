@@ -222,7 +222,9 @@ function App() {
     deleteCategory,
     addRule,
     deleteRule,
+    updateTransaction,
     updateTransactionCategory,
+    deleteTransaction,
     resetAllData,
     importBackup,
     exportBackup,
@@ -730,6 +732,8 @@ function App() {
                     transactions={filteredTransactions}
                     categories={categories}
                     onUpdateCategory={(transactionId, categoryId) => updateTransactionCategory(transactionId, categoryId)}
+                    onUpdateTransaction={(transactionId, updates) => updateTransaction(transactionId, updates)}
+                    onDeleteTransaction={(transactionId) => deleteTransaction(transactionId)}
                   />
                 </>
               ) : null}
