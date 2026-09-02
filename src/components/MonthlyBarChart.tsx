@@ -11,7 +11,7 @@ import {
 export interface MonthlyChartPoint {
   month: string;
   income: number;
-  expense: number;
+  expenses: number;
 }
 
 interface MonthlyBarChartProps {
@@ -41,7 +41,7 @@ export function MonthlyBarChart({ data }: MonthlyBarChartProps) {
             }}
           />
           <Bar dataKey="income" name="Entradas" fill="#22c55e" radius={[6, 6, 0, 0]} />
-          <Bar dataKey="expense" name="Saídas" fill="#f87171" radius={[6, 6, 0, 0]} />
+          <Bar dataKey="expenses" name="Saídas" fill="#f87171" radius={[6, 6, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

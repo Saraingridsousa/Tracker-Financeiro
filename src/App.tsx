@@ -105,27 +105,65 @@ const filterTransactionsByPeriod = (items: Transaction[], period: (typeof period
 };
 
 const buildMonthlyData = (items: Transaction[]) => {
-  const grouped = new Map<string, { income: number; expense: number; month: string }>();
+  const grouped = new Map<string, { income: number; expenses: number; month: string; sortKey: string }>();
 
   items.forEach((item) => {
-    const date = parseISODate(item.date);
-    const key = `${date.getFullYear()}-${date.getMonth()}`;
-    const label = getMonthLabel(date);
+    let year = '';
+    let monthNum = '';
 
-    if (!grouped.has(key)) {
-      grouped.set(key, { month: label, income: 0, expense: 0 });
+    if (item.date.includes('-')) {
+      const parts = item.date.split('-');
+      year = parts[0];
+      monthNum = parts[1];
+    } else if (item.date.includes('/')) {
+      const parts = item.date.split('/');
+      year = parts[2];
+      monthNum = parts[1];
     }
 
-    const current = grouped.get(key)!;
-    if (item.type === 'income') current.income += item.amount;
-    else current.expense += item.amount;
+    if (!year || !monthNum) return;
+
+    const sortKey = `${year}-${monthNum.padStart(2, '0')}`;
+    const monthLabels: Record<string, string> = {
+      '01': 'jan',
+      '02': 'fev',
+      '03': 'mar',
+      '04': 'abr',
+      '05': 'mai',
+      '06': 'jun',
+      '07': 'jul',
+      '08': 'ago',
+      '09': 'set',
+      '10': 'out',
+      '11': 'nov',
+      '12': 'dez',
+    };
+    const label = monthLabels[monthNum.padStart(2, '0')] || monthNum;
+
+    if (!grouped.has(sortKey)) {
+      grouped.set(sortKey, { month: label, sortKey, income: 0, expenses: 0 });
+    }
+
+    const current = grouped.get(sortKey)!;
+    const absAmount = Math.abs(item.amount);
+
+    if (item.type === 'income') {
+      current.income += absAmount;
+    } else if (
+      (item.type === 'expense' || item.amount < 0) &&
+      !item.isNeutral &&
+      !item.isInternalTransfer &&
+      !item.isSelfTransfer &&
+      !item.isInvestment &&
+      !item.isCreditCardPayment &&
+      item.category !== 'Pagamento de Fatura' &&
+      item.categoryId !== 'pagamento_fatura'
+    ) {
+      current.expenses += absAmount;
+    }
   });
 
-  return Array.from(grouped.values()).sort((a, b) => {
-    const left = new Date(`${new Date().getFullYear()}-${a.month}`);
-    const right = new Date(`${new Date().getFullYear()}-${b.month}`);
-    return left.getTime() - right.getTime();
-  });
+  return Array.from(grouped.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 };
 
 const getRealExpenseTransactions = (items: Transaction[]) =>
@@ -251,7 +289,7 @@ function App() {
     };
   }, [categories, filteredTransactions, portfolioSummary.totalCurrentValue]);
 
-  const monthlyChartData = useMemo(() => buildMonthlyData(realExpenses), [realExpenses]);
+  const monthlyChartData = useMemo(() => buildMonthlyData(filteredTransactions), [filteredTransactions]);
   const categoryChartData = useMemo(() => buildCategoryData(filteredTransactions, categories), [filteredTransactions, categories]);
 
   const topCategoryList = useMemo(
