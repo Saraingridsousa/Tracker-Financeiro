@@ -166,6 +166,43 @@ const buildMonthlyData = (items: Transaction[]) => {
   return Array.from(grouped.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 };
 
+const getTransactionMonthKey = (dateStr: string) => {
+  if (!dateStr) return '';
+
+  if (dateStr.includes('/')) {
+    const [, month, year] = dateStr.split('/');
+    return `${year}-${month.padStart(2, '0')}`;
+  }
+
+  if (dateStr.includes('-')) {
+    const [year, month] = dateStr.split('-');
+    return `${year}-${month.padStart(2, '0')}`;
+  }
+
+  return '';
+};
+
+const monthNames: Record<string, string> = {
+  '01': 'jan',
+  '02': 'fev',
+  '03': 'mar',
+  '04': 'abr',
+  '05': 'mai',
+  '06': 'jun',
+  '07': 'jul',
+  '08': 'ago',
+  '09': 'set',
+  '10': 'out',
+  '11': 'nov',
+  '12': 'dez',
+};
+
+const formatMonthPeriodLabel = (yearMonth: string) => {
+  const [year, month] = yearMonth.split('-');
+  if (!year || !month) return yearMonth;
+  return `${monthNames[month] || month}/${year.slice(2)}`;
+};
+
 const getRealExpenseTransactions = (items: Transaction[]) =>
   items.filter(
     (transaction) =>
@@ -203,6 +240,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<(typeof periodOptions)[number]['value']>('last2months');
+  const [categoryChartPeriod, setCategoryChartPeriod] = useState<string>('ALL');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -292,21 +330,41 @@ function App() {
   }, [categories, filteredTransactions, portfolioSummary.totalCurrentValue]);
 
   const monthlyChartData = useMemo(() => buildMonthlyData(filteredTransactions), [filteredTransactions]);
-  const categoryChartData = useMemo(() => buildCategoryData(filteredTransactions, categories), [filteredTransactions, categories]);
+
+  const categoryMonthOptions = useMemo(() => {
+    const months = new Map<string, string>();
+
+    transactions.forEach((transaction) => {
+      const key = getTransactionMonthKey(transaction.date);
+      if (!key) return;
+      months.set(key, key);
+    });
+
+    return Array.from(months.keys()).sort((left, right) => right.localeCompare(left));
+  }, [transactions]);
+
+  const filteredCategoryExpenses = useMemo(() => {
+    const base = getRealExpenseTransactions(filteredTransactions);
+    if (categoryChartPeriod === 'ALL') return base;
+
+    return base.filter((transaction) => getTransactionMonthKey(transaction.date) === categoryChartPeriod);
+  }, [categoryChartPeriod, filteredTransactions]);
+
+  const categoryChartData = useMemo(() => buildCategoryData(filteredCategoryExpenses, categories), [filteredCategoryExpenses, categories]);
 
   const topCategoryList = useMemo(
     () =>
       [...categories]
         .map((category) => ({
           ...category,
-          total: getRealExpenseTransactions(filteredTransactions)
+          total: filteredCategoryExpenses
             .filter((tx) => tx.categoryId === category.id)
             .reduce((sum, tx) => sum + tx.amount, 0),
         }))
         .filter((item) => item.total > 0)
         .sort((a, b) => b.total - a.total)
         .slice(0, 5),
-    [categories, filteredTransactions],
+    [categories, filteredCategoryExpenses],
   );
 
   const normalizeImportedCategory = (input?: string) => {
@@ -683,7 +741,22 @@ function App() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Maiores gastos</h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Maiores gastos</h3>
+              <select
+                value={categoryChartPeriod}
+                onChange={(event) => setCategoryChartPeriod(event.target.value)}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                <option value="ALL">Geral (Todos os meses)</option>
+                {categoryMonthOptions.map((monthKey) => (
+                  <option key={monthKey} value={monthKey}>
+                    {formatMonthPeriodLabel(monthKey)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {categoryChartData.length ? (
               <>
                 <CategoryPieChart data={categoryChartData} />
@@ -700,8 +773,8 @@ function App() {
                 </div>
               </>
             ) : (
-              <div className="flex h-64 items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-                Nenhuma categoria para exibir.
+              <div className="flex h-64 items-center justify-center text-center text-sm text-slate-500 dark:text-slate-400">
+                Nenhum gasto registrado neste período.
               </div>
             )}
           </div>
