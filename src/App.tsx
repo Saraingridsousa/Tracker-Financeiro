@@ -683,7 +683,7 @@ function App() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Top categorias</h3>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Maiores gastos</h3>
             {categoryChartData.length ? (
               <>
                 <CategoryPieChart data={categoryChartData} />
