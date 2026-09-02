@@ -31,6 +31,43 @@ interface TransactionTableProps {
 
 const pageSize = 8;
 
+const getTransactionMonthKey = (dateStr: string) => {
+  if (!dateStr) return '';
+
+  if (dateStr.includes('/')) {
+    const [, month, year] = dateStr.split('/');
+    return `${year}-${month.padStart(2, '0')}`;
+  }
+
+  if (dateStr.includes('-')) {
+    const [year, month] = dateStr.split('-');
+    return `${year}-${month.padStart(2, '0')}`;
+  }
+
+  return '';
+};
+
+const monthNames: Record<string, string> = {
+  '01': 'jan',
+  '02': 'fev',
+  '03': 'mar',
+  '04': 'abr',
+  '05': 'mai',
+  '06': 'jun',
+  '07': 'jul',
+  '08': 'ago',
+  '09': 'set',
+  '10': 'out',
+  '11': 'nov',
+  '12': 'dez',
+};
+
+const formatPeriodLabel = (yearMonth: string) => {
+  const [year, month] = yearMonth.split('-');
+  if (!year || !month) return yearMonth;
+  return `${monthNames[month] || month}/${year.slice(2)}`;
+};
+
 const sortTransactionsByDateDesc = (items: Transaction[]) =>
   [...items].sort((a, b) => {
     const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
@@ -47,6 +84,9 @@ export function TransactionTable({
 }: TransactionTableProps) {
   const [search, setSearch] = useState('');
   const [selectedBank, setSelectedBank] = useState<'all' | 'Inter' | 'Caixa' | 'Sofisa' | 'BB' | 'Outro'>('all');
+  const [selectedType, setSelectedType] = useState<'all' | 'income' | 'expense'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -69,6 +109,18 @@ export function TransactionTable({
     [transactions],
   );
 
+  const monthOptions = useMemo(() => {
+    const months = new Map<string, string>();
+
+    transactions.forEach((transaction) => {
+      const key = getTransactionMonthKey(transaction.date);
+      if (!key) return;
+      months.set(key, key);
+    });
+
+    return Array.from(months.keys()).sort((left, right) => right.localeCompare(left));
+  }, [transactions]);
+
   const sortedTransactions = useMemo(() => {
     const items = sortTransactionsByDateDesc(transactions);
     if (sortConfig.field === 'date' && sortConfig.direction === 'asc') {
@@ -79,12 +131,22 @@ export function TransactionTable({
 
   const filteredTransactions = useMemo(() => {
     const term = search.trim().toLowerCase();
+
     return sortedTransactions.filter((transaction) => {
       const matchesSearch = !term || transaction.description.toLowerCase().includes(term);
       const matchesBank = selectedBank === 'all' || (transaction.bank ?? 'Outro') === selectedBank;
-      return matchesSearch && matchesBank;
+      const matchesType = selectedType === 'all' || transaction.type === selectedType;
+      const transactionMonth = getTransactionMonthKey(transaction.date);
+      const matchesCategory =
+        selectedCategory === 'all' ||
+        (selectedCategory === 'uncategorized'
+          ? (transaction.categoryId ?? 'uncategorized') === 'uncategorized'
+          : transaction.categoryId === selectedCategory);
+      const matchesMonth = selectedMonth === 'all' || transactionMonth === selectedMonth;
+
+      return matchesSearch && matchesBank && matchesType && matchesCategory && matchesMonth;
     });
-  }, [search, selectedBank, sortedTransactions]);
+  }, [search, selectedBank, selectedCategory, selectedMonth, selectedType, sortedTransactions]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTransactions.length / pageSize));
 
@@ -175,7 +237,7 @@ export function TransactionTable({
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Transações</h3>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={selectedBank}
                 onChange={(event) => {
@@ -191,6 +253,53 @@ export function TransactionTable({
                   </option>
                 ))}
               </select>
+
+              <select
+                value={selectedType}
+                onChange={(event) => {
+                  setSelectedType(event.target.value as 'all' | 'income' | 'expense');
+                  setPage(1);
+                }}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                <option value="all">Todos os tipos</option>
+                <option value="income">Entradas</option>
+                <option value="expense">Saídas</option>
+              </select>
+
+              <select
+                value={selectedCategory}
+                onChange={(event) => {
+                  setSelectedCategory(event.target.value);
+                  setPage(1);
+                }}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                <option value="all">Todas as categorias</option>
+                <option value="uncategorized">Sem categoria</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedMonth}
+                onChange={(event) => {
+                  setSelectedMonth(event.target.value);
+                  setPage(1);
+                }}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                <option value="all">Todos os períodos</option>
+                {monthOptions.map((monthKey) => (
+                  <option key={monthKey} value={monthKey}>
+                    {formatPeriodLabel(monthKey)}
+                  </option>
+                ))}
+              </select>
+
               <input
                 value={search}
                 onChange={(event) => {
