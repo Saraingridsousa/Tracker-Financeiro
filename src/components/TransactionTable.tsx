@@ -31,6 +31,15 @@ interface TransactionTableProps {
 
 const pageSize = 8;
 
+const normalizeDateToISO = (dateStr: string) => {
+  if (!dateStr) return '';
+  if (dateStr.includes('/')) {
+    const [day, month, year] = dateStr.split('/');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  return dateStr;
+};
+
 const getTransactionMonthKey = (dateStr: string) => {
   if (!dateStr) return '';
 
@@ -131,8 +140,9 @@ export function TransactionTable({
 
   const filteredTransactions = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const isSpecificMonthSelected = Boolean(selectedMonth && selectedMonth !== 'all');
 
-    return sortedTransactions.filter((transaction) => {
+    const filteredList = sortedTransactions.filter((transaction) => {
       const matchesSearch = !term || transaction.description.toLowerCase().includes(term);
       const matchesBank = selectedBank === 'all' || (transaction.bank ?? 'Outro') === selectedBank;
       const matchesType = selectedType === 'all' || transaction.type === selectedType;
@@ -145,6 +155,17 @@ export function TransactionTable({
       const matchesMonth = selectedMonth === 'all' || transactionMonth === selectedMonth;
 
       return matchesSearch && matchesBank && matchesType && matchesCategory && matchesMonth;
+    });
+
+    return [...filteredList].sort((a, b) => {
+      const dateA = normalizeDateToISO(a.date);
+      const dateB = normalizeDateToISO(b.date);
+
+      if (isSpecificMonthSelected) {
+        return dateA.localeCompare(dateB);
+      }
+
+      return dateB.localeCompare(dateA);
     });
   }, [search, selectedBank, selectedCategory, selectedMonth, selectedType, sortedTransactions]);
 
