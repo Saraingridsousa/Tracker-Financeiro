@@ -218,20 +218,31 @@ const getRealExpenseTransactions = (items: Transaction[]) =>
 
 const buildCategoryData = (items: Transaction[], categories: Category[]) => {
   const map = new Map<string, number>();
-
-  getRealExpenseTransactions(items).forEach((item) => {
-    const category = categories.find((entry) => entry.id === item.categoryId) ?? categories[0];
-    map.set(category?.name ?? 'Outros', (map.get(category?.name ?? 'Outros') ?? 0) + item.amount);
+  const validItems = getRealExpenseTransactions(items).filter((item) => {
+    const hasCategoryName = Boolean(item.category && item.category.trim() !== '' && item.category.toLowerCase() !== 'sem categoria');
+    const hasCategoryId = item.categoryId !== 'sem_categoria' && item.categoryId !== 'uncategorized';
+    return hasCategoryName && hasCategoryId && Boolean(item.categoryId);
   });
 
-  return Array.from(map.entries())
+  const totalForChart = validItems.reduce((sum, item) => sum + Math.abs(item.amount), 0);
+
+  validItems.forEach((item) => {
+    const category = categories.find((entry) => entry.id === item.categoryId) ?? categories[0];
+    const categoryName = category?.name ?? 'Outros';
+    map.set(categoryName, (map.get(categoryName) ?? 0) + Math.abs(item.amount));
+  });
+
+  const entries = Array.from(map.entries())
     .map(([name, value]) => ({
       name,
       value,
       color: categories.find((entry) => entry.name === name)?.color ?? '#7dd3fc',
+      percentage: totalForChart > 0 ? (value / totalForChart) * 100 : 0,
     }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 6);
+
+  return entries;
 };
 
 function App() {
@@ -358,8 +369,16 @@ function App() {
         .map((category) => ({
           ...category,
           total: filteredCategoryExpenses
-            .filter((tx) => tx.categoryId === category.id)
-            .reduce((sum, tx) => sum + tx.amount, 0),
+            .filter((tx) => {
+              const validCategory =
+                Boolean(tx.category && tx.category.trim() !== '' && tx.category.toLowerCase() !== 'sem categoria') &&
+                tx.categoryId !== 'sem_categoria' &&
+                tx.categoryId !== 'uncategorized' &&
+                Boolean(tx.categoryId);
+
+              return validCategory && tx.categoryId === category.id;
+            })
+            .reduce((sum, tx) => sum + Math.abs(tx.amount), 0),
         }))
         .filter((item) => item.total > 0)
         .sort((a, b) => b.total - a.total)
