@@ -254,18 +254,18 @@ export function TransactionTable({
           </div>
         </div>
       )}
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
+      <div className="flex flex-col gap-6">
+        <section className="order-2 w-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Transações</h3>
-            <div className="flex flex-wrap items-center gap-2">
+            <h3 className="shrink-0 text-lg font-semibold text-slate-900 dark:text-white">Transações</h3>
+            <div className="flex flex-wrap items-center gap-2.5 lg:flex-nowrap">
               <select
                 value={selectedBank}
                 onChange={(event) => {
                   setSelectedBank(event.target.value as 'all' | 'Inter' | 'Caixa' | 'Sofisa' | 'BB' | 'Outro');
                   setPage(1);
                 }}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                className="h-10 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
               >
                 <option value="all">Todos os bancos</option>
                 {bankOptions.map((bank) => (
@@ -281,7 +281,7 @@ export function TransactionTable({
                   setSelectedType(event.target.value as 'all' | 'income' | 'expense');
                   setPage(1);
                 }}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                className="h-10 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
               >
                 <option value="all">Todos os tipos</option>
                 <option value="income">Entradas</option>
@@ -294,7 +294,7 @@ export function TransactionTable({
                   setSelectedCategory(event.target.value);
                   setPage(1);
                 }}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                className="h-10 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
               >
                 <option value="all">Todas as categorias</option>
                 <option value="uncategorized">Sem categoria</option>
@@ -311,7 +311,7 @@ export function TransactionTable({
                   setSelectedMonth(event.target.value);
                   setPage(1);
                 }}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                className="h-10 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
               >
                 <option value="all">Todos os períodos</option>
                 {monthOptions.map((monthKey) => (
@@ -328,7 +328,7 @@ export function TransactionTable({
                   setPage(1);
                 }}
                 placeholder="Buscar por descrição"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none ring-0 transition placeholder:text-slate-400 focus:border-cyan-400 sm:max-w-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500"
+                className="h-10 w-full shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none ring-0 transition placeholder:text-slate-400 focus:border-cyan-400 sm:w-64 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500"
               />
             </div>
           </div>
@@ -498,9 +498,9 @@ export function TransactionTable({
           </div>
         </section>
 
-        <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
+        <aside className="order-1 w-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
           <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Top 5 maiores gastos</h3>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {topExpenses.length ? (
               topExpenses.map((transaction, index) => {
                 const category = categories.find((item) => item.id === transaction.categoryId);

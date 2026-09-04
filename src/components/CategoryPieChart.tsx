@@ -12,15 +12,15 @@ interface CategoryPieChartProps {
 
 export function CategoryPieChart({ data }: CategoryPieChartProps) {
   return (
-    <div className="h-72 w-full">
+    <div className="h-60 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
             data={data}
             dataKey="value"
             nameKey="name"
-            innerRadius={60}
-            outerRadius={90}
+            innerRadius={52}
+            outerRadius={78}
             paddingAngle={3}
             stroke="transparent"
           >

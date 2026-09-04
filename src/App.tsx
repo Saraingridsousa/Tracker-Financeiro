@@ -328,7 +328,6 @@ function App() {
   });
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'investments'>('overview');
   const transactionsStore = useTransactions();
   const investmentsStore = useInvestments();
@@ -375,9 +374,8 @@ function App() {
     const periodTransactions = filterTransactionsByPeriod(transactions, selectedPeriod).filter(
       (transaction) => !transaction.isSelfTransfer && !transaction.isInternalTransfer,
     );
-    if (selectedCategoryFilter === 'all') return periodTransactions;
-    return periodTransactions.filter((transaction) => transaction.categoryId === selectedCategoryFilter);
-  }, [transactions, selectedPeriod, selectedCategoryFilter]);
+    return periodTransactions;
+  }, [transactions, selectedPeriod]);
 
   const realExpenses = useMemo(() => getRealExpenseTransactions(filteredTransactions), [filteredTransactions]);
 
@@ -585,7 +583,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-8 flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-soft backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -821,8 +819,8 @@ function App() {
           ))}
         </section>
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-[1.7fr_1fr]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+        <section className="flex flex-col gap-6">
+          <div className="w-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Resumo do período</h3>
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -833,8 +831,9 @@ function App() {
             <MonthlyBarChart data={monthlyChartData} />
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-            <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+              <div className="mb-4 flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Maiores gastos</h3>
               <select
                 value={categoryChartPeriod}
@@ -848,7 +847,7 @@ function App() {
                   </option>
                 ))}
               </select>
-            </div>
+              </div>
 
             {categoryChartData.length ? (
               <>
@@ -870,10 +869,10 @@ function App() {
                 Nenhum gasto registrado neste período.
               </div>
             )}
-          </div>
+            </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+              <div className="mb-4 flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Fontes de receita</h3>
               <select
                 value={incomeChartPeriod}
@@ -887,7 +886,7 @@ function App() {
                   </option>
                 ))}
               </select>
-            </div>
+              </div>
 
             {incomeSourceChartData.length ? (
               <>
@@ -909,30 +908,13 @@ function App() {
                 Nenhuma receita registrada neste período.
               </div>
             )}
+            </div>
           </div>
         </section>
 
-            <div className="mt-8">
+            <div className="mt-0">
               {transactions.length > 0 ? (
                 <>
-                  <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-1 items-center gap-3">
-                      <label className="text-sm text-slate-600 dark:text-slate-300">Filtrar por categoria</label>
-                      <select
-                        value={selectedCategoryFilter}
-                        onChange={(event) => setSelectedCategoryFilter(event.target.value)}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                      >
-                        <option value="all">Todas</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
                   <TransactionTable
                     transactions={filteredTransactions}
                     categories={categories}
