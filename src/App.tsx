@@ -245,6 +245,54 @@ const buildCategoryData = (items: Transaction[], categories: Category[]) => {
   return entries;
 };
 
+const buildIncomeCategoryData = (items: Transaction[], categories: Category[], period?: string) => {
+  const isAllPeriods = !period || period === 'ALL' || period === 'all' || period.toLowerCase().includes('geral');
+
+  const filtered = items.filter((item) => {
+    if (item.type !== 'income') return false;
+
+    if (!isAllPeriods) {
+      let itemPeriod = '';
+      if (item.date.includes('-')) {
+        const [year, month] = item.date.split('-');
+        itemPeriod = `${year}-${month.padStart(2, '0')}`;
+      } else if (item.date.includes('/')) {
+        const [, month, year] = item.date.split('/');
+        itemPeriod = `${year}-${month.padStart(2, '0')}`;
+      }
+      if (itemPeriod !== period) return false;
+    }
+
+    if (item.isInternalTransfer || item.isSelfTransfer || item.category === 'Pagamento de Fatura') return false;
+
+    const foundCategory = categories.find((category) => category.id === item.categoryId);
+    const categoryName = item.category || foundCategory?.name || '';
+    if (!categoryName || categoryName.toLowerCase() === 'sem categoria' || item.categoryId === 'sem_categoria') return false;
+
+    return true;
+  });
+
+  const grouped = new Map<string, number>();
+  filtered.forEach((item) => {
+    const foundCategory = categories.find((category) => category.id === item.categoryId);
+    const categoryName = (item.category || foundCategory?.name || 'Outras Receitas').trim();
+    const current = grouped.get(categoryName) || 0;
+    grouped.set(categoryName, current + Math.abs(item.amount));
+  });
+
+  const total = Array.from(grouped.values()).reduce((sum, value) => sum + value, 0);
+  const palette = ['#10b981', '#34d399', '#22c55e', '#0ea5e9', '#2dd4bf', '#14b8a6'];
+
+  return Array.from(grouped.entries())
+    .map(([name, value], index) => ({
+      name,
+      value,
+      color: categories.find((category) => category.name === name)?.color ?? palette[index % palette.length],
+      percentage: total > 0 ? (value / total) * 100 : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+};
+
 function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
@@ -252,6 +300,7 @@ function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<(typeof periodOptions)[number]['value']>('last2months');
   const [categoryChartPeriod, setCategoryChartPeriod] = useState<string>('ALL');
+  const [incomeChartPeriod, setIncomeChartPeriod] = useState<string>('ALL');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -385,6 +434,13 @@ function App() {
         .slice(0, 5),
     [categories, filteredCategoryExpenses],
   );
+
+  const incomeSourceChartData = useMemo(
+    () => buildIncomeCategoryData(filteredTransactions, categories, incomeChartPeriod),
+    [filteredTransactions, categories, incomeChartPeriod],
+  );
+
+  const topIncomeSourceList = useMemo(() => [...incomeSourceChartData].slice(0, 5), [incomeSourceChartData]);
 
   const normalizeImportedCategory = (input?: string) => {
     if (!input) return null;
@@ -794,6 +850,45 @@ function App() {
             ) : (
               <div className="flex h-64 items-center justify-center text-center text-sm text-slate-500 dark:text-slate-400">
                 Nenhum gasto registrado neste período.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Fontes de receita</h3>
+              <select
+                value={incomeChartPeriod}
+                onChange={(event) => setIncomeChartPeriod(event.target.value)}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-emerald-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                <option value="ALL">Geral (Todos os meses)</option>
+                {categoryMonthOptions.map((monthKey) => (
+                  <option key={monthKey} value={monthKey}>
+                    {formatMonthPeriodLabel(monthKey)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {incomeSourceChartData.length ? (
+              <>
+                <CategoryPieChart data={incomeSourceChartData} />
+                <div className="mt-2 space-y-3">
+                  {topIncomeSourceList.map((source) => (
+                    <div key={source.name} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950/70">
+                      <div className="flex items-center gap-3">
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: source.color }} />
+                        <span className="text-sm text-slate-700 dark:text-slate-200">{source.name}</span>
+                      </div>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">{formatCurrency(source.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex h-64 items-center justify-center text-center text-sm text-slate-500 dark:text-slate-400">
+                Nenhuma receita registrada neste período.
               </div>
             )}
           </div>
