@@ -53,6 +53,15 @@ const parseISODate = (value: string) => {
   return new Date(year, month - 1, day);
 };
 
+const normalizeDateToISO = (dateStr: string) => {
+  if (!dateStr) return '';
+  if (dateStr.includes('/')) {
+    const [day, month, year] = dateStr.split('/');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  return dateStr.split('T')[0];
+};
+
 const formatBrazilianDate = (value: string) => {
   if (!value) return '';
 
@@ -77,8 +86,13 @@ const getMonthLabel = (date: Date) =>
 const filterTransactionsByPeriod = (items: Transaction[], period: (typeof periodOptions)[number]['value']) => {
   if (period === 'all') return items;
 
-  const now = new Date();
-  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const latestDate = items
+    .map((item) => normalizeDateToISO(item.date))
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+    .sort((left, right) => right.localeCompare(left))[0];
+  const fallbackDate = new Date();
+  const referenceDate = latestDate ? parseISODate(latestDate) : fallbackDate;
+  const currentMonth = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
   const startDate = new Date(currentMonth);
 
   if (period === 'month') {
@@ -101,7 +115,10 @@ const filterTransactionsByPeriod = (items: Transaction[], period: (typeof period
     startDate.setFullYear(currentMonth.getFullYear() - 1);
   }
 
-  return items.filter((item) => parseISODate(item.date) >= startDate);
+  return items.filter((item) => {
+    const normalizedDate = normalizeDateToISO(item.date);
+    return /^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) && parseISODate(normalizedDate) >= startDate;
+  });
 };
 
 const buildMonthlyData = (items: Transaction[]) => {
@@ -298,10 +315,17 @@ function App() {
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<(typeof periodOptions)[number]['value']>('last2months');
+  const [selectedPeriod, setSelectedPeriod] = useState<(typeof periodOptions)[number]['value']>('all');
   const [categoryChartPeriod, setCategoryChartPeriod] = useState<string>('ALL');
   const [incomeChartPeriod, setIncomeChartPeriod] = useState<string>('ALL');
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = window.localStorage.getItem('tracker-theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+    }
+
+    return 'light';
+  });
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
@@ -340,12 +364,6 @@ function App() {
     importBackup: importInvestmentBackup,
     exportBackup: exportInvestmentBackup,
   } = investmentsStore;
-
-  useEffect(() => {
-    const savedTheme = window.localStorage.getItem('tracker-theme');
-    const preferredTheme = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
-    setTheme(preferredTheme);
-  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
