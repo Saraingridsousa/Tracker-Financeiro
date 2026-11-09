@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { classifyTransaction, inferCategory as inferCategoryFromRules, summarizeTransactions } from '../domain/finance';
 
 import type { BackupPayload, Category, DashboardSummary, Rule, Transaction } from '../types/finance';
 
@@ -14,25 +15,7 @@ const normalizeImportText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const classifyTransactionFlags = (transaction: Transaction): Transaction => {
-  const normalized = normalizeImportText(transaction.description);
-  const isSelfTransferPattern = /(sara ingrid|sara i s o afonso|sara afonso|sara ingrid sousa|sara sousa|cp\s*:\s*\d{7,8}|pix (recebido|enviado).*sara|recebimento de transfer.*via pix.*sara|envio de transfer.*via pix.*sara|para sara|de sara|sara\b)/i.test(normalized);
-  const isInternalTransfer = /(pix|ted|transferencia|transferência|conta propria|conta própria|mesma titularidade|entre contas)/i.test(normalized);
-  const isSelfTransfer = isInternalTransfer && isSelfTransferPattern;
-  const isInvestment = /(cdb|lci|tesouro|selic|b3|aplicacao|aplicação|resgate|vencimento|investimento|dividendos|juros sobre capital)/i.test(normalized);
-  const isCreditCardPayment = /(pagamento on line|pagamento online|pagamento fatura cartao|pagamento de fatura|pagamento efetuado.*pagamento fatura|pagamento efetuado: pagamento fatura)/i.test(normalized);
-  const isNeutral = isInternalTransfer || isInvestment || isCreditCardPayment || isSelfTransfer;
-
-  return {
-    ...transaction,
-    isInternalTransfer: isInternalTransfer || isSelfTransfer,
-    isSelfTransfer,
-    isInvestment: isInvestment && !isInternalTransfer,
-    isCreditCardPayment,
-    isNeutral,
-    category: isCreditCardPayment ? 'Pagamento de Fatura' : transaction.category,
-  };
-};
+const classifyTransactionFlags = (transaction: Transaction): Transaction => classifyTransaction(transaction);
 
 const buildTransactionFingerprint = (transaction: Pick<Transaction, 'date' | 'description' | 'amount' | 'type'>) => {
   const normalized = normalizeImportText(`${transaction.date}|${transaction.description}|${Math.abs(transaction.amount).toFixed(2)}|${transaction.type}`);
@@ -40,7 +23,7 @@ const buildTransactionFingerprint = (transaction: Pick<Transaction, 'date' | 'de
 };
 
 const defaultCategories: Category[] = [
-  { id: 'alimentacao', name: 'Alimentação', color: '#ef4444', keywords: ['uber', 'restaurante', 'mercado', 'padaria', 'delivery'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
+  { id: 'alimentacao', name: 'Alimentação', color: '#ef4444', keywords: ['restaurante', 'mercado', 'padaria', 'delivery'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'moradia', name: 'Moradia', color: '#f59e0b', keywords: ['aluguel', 'condominio', 'luz', 'água', 'internet'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'transporte', name: 'Transporte', color: '#3b82f6', keywords: ['uber', 'metro', 'onibus', 'combustivel', 'posto'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
   { id: 'lazer', name: 'Lazer', color: '#8b5cf6', keywords: ['cinema', 'spotify', 'streaming', 'ingresso'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
@@ -147,6 +130,8 @@ export const useTransactions = () => {
       keywords: category.keywords ?? [],
       type: category.type,
       isDefault: false,
+      isNeutral: category.isNeutral ?? false,
+      excludeFromTotals: category.excludeFromTotals ?? false,
     };
 
     setCategories((prev) => [...prev, newCategory]);
@@ -168,112 +153,9 @@ export const useTransactions = () => {
     );
   };
 
-  const inferCategory = (description: string): string => {
-    const normalized = normalizeImportText(description);
+  const inferCategory = (description: string, type?: Transaction['type']): string => inferCategoryFromRules(description, categories, rules, type);
 
-    const specificRules = [
-      {
-        categoryId: 'transferencia',
-        match: new RegExp(
-          '((sara ingrid|sara i s o afonso|sara afonso).*(pix recebido|pix enviado|recebimento de transferencia|envio de transferencia))|((pix recebido|pix enviado|recebimento de transferencia|envio de transferencia).*(sara ingrid|sara i s o afonso|sara afonso))',
-          'i',
-        ),
-      },
-      {
-        categoryId: 'pagamento_fatura',
-        match: new RegExp('(pagamento fatura cartao|pagamento efetuado.*pagamento fatura|pagamento de fatura|pgto fatura)', 'i'),
-      },
-      {
-        categoryId: 'investimentos',
-        match: new RegExp('(aplicacao|resgate|cdb|lci|debito online td|debito online t d|selic|tesouro)', 'i'),
-      },
-      {
-        categoryId: 'proventos',
-        match: new RegExp('(prov rendimento|prov dividendos|prov juros s capital|credito evento b3|dividendos|juros sobre capital)', 'i'),
-      },
-    ];
-
-    for (const rule of specificRules) {
-      if (rule.match.test(normalized)) {
-        return rule.categoryId;
-      }
-    }
-
-    for (const category of categories) {
-      const matched = category.keywords.some((keyword) => {
-        const cleanedKeyword = normalizeImportText(keyword);
-        return cleanedKeyword.length > 0 && normalized.includes(cleanedKeyword);
-      });
-
-      if (matched) {
-        return category.id;
-      }
-    }
-
-    return 'uncategorized';
-  };
-
-  const dashboardSummary = useMemo<DashboardSummary>(() => {
-    const getCategoryMeta = (tx: Transaction) => categories.find((category) => category.id === tx.categoryId);
-
-    const activeTransactions = transactions.filter((tx) => {
-      const categoryMeta = getCategoryMeta(tx);
-      const isExcluded =
-        tx.isCreditCardPayment ||
-        tx.isInternalTransfer ||
-        tx.isInvestment ||
-        tx.isNeutral ||
-        categoryMeta?.isNeutral ||
-        categoryMeta?.excludeFromTotals ||
-        tx.categoryId === 'pagamento_fatura';
-
-      return !isExcluded;
-    });
-
-    const income = activeTransactions
-      .filter((tx) => tx.type === 'income')
-      .reduce((sum, tx) => sum + tx.amount, 0);
-
-    const expenses = activeTransactions
-      .filter((tx) => tx.type === 'expense')
-      .reduce((sum, tx) => sum + tx.amount, 0);
-
-    const neutralTotal = transactions
-      .filter((tx) => {
-        const categoryMeta = getCategoryMeta(tx);
-        return (
-          tx.isNeutral ||
-          tx.isCreditCardPayment ||
-          tx.isInternalTransfer ||
-          tx.isInvestment ||
-          categoryMeta?.isNeutral ||
-          categoryMeta?.excludeFromTotals ||
-          tx.categoryId === 'pagamento_fatura'
-        );
-      })
-      .reduce((sum, tx) => sum + tx.amount, 0);
-
-    const totalInvested = transactions
-      .filter((tx) => !tx.isInternalTransfer && tx.isInvestment)
-      .reduce((sum, tx) => {
-        if (tx.type === 'expense') return sum + tx.amount;
-        if (tx.type === 'income') return sum - tx.amount;
-        return sum;
-      }, 0);
-
-    const balance = income - expenses;
-    const averageExpense = expenses > 0 ? expenses / Math.max(1, activeTransactions.filter((tx) => tx.type === 'expense').length) : 0;
-
-    return {
-      balance,
-      income,
-      expenses,
-      averageExpense,
-      monthCount: new Set(transactions.map((tx) => tx.date.slice(0, 7))).size,
-      neutralTotal,
-      totalInvested,
-    };
-  }, [categories, transactions]);
+  const dashboardSummary = useMemo<DashboardSummary>(() => summarizeTransactions(transactions, categories), [categories, transactions]);
 
   const updateTransactionCategory = (transactionId: string, categoryId: string) => {
     setTransactions((prev) =>

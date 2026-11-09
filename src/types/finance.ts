@@ -11,7 +11,13 @@ export interface Transaction {
   type: TransactionType;
   categoryId: string;
   categoryName?: string;
-  source: 'manual' | 'import';
+  source: 'manual' | 'import' | 'pluggy';
+  providerStatus?: 'POSTED' | 'PENDING';
+  providerTransactionId?: string;
+  accountId?: string;
+  currencyCode?: string;
+  amountCents?: number;
+  manualCategory?: boolean;
   isInternalTransfer?: boolean;
   isSelfTransfer?: boolean;
   isInvestment?: boolean;
