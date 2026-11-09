@@ -3,3 +3,19 @@ dist
 .vite
 .DS_Store
 *.log
+
+# Segredos e dados financeiros nunca entram no Git
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+data/
+.evidence/
+graphify-out/
+.cache/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
