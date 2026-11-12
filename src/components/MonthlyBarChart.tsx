@@ -20,7 +20,7 @@ interface MonthlyBarChartProps {
 
 export function MonthlyBarChart({ data }: MonthlyBarChartProps) {
   return (
-    <div className="h-72 w-full">
+    <div className="h-72 w-full overflow-hidden">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} barGap={8}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.18)" />

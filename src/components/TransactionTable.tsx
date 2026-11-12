@@ -2,6 +2,7 @@ import { Trash2 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 
 import type { Category, Transaction } from '../types/finance';
+import { isRealExpense } from '../domain/finance';
 
 const formatBrazilianDate = (value: string) => {
   if (!value) return '';
@@ -92,7 +93,7 @@ export function TransactionTable({
   onDeleteTransaction,
 }: TransactionTableProps) {
   const [search, setSearch] = useState('');
-  const [selectedBank, setSelectedBank] = useState<'all' | 'Inter' | 'Caixa' | 'Sofisa' | 'BB' | 'Outro'>('all');
+  const [selectedBank, setSelectedBank] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<'all' | 'income' | 'expense'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
@@ -111,8 +112,8 @@ export function TransactionTable({
       Array.from(
         new Set(
           transactions
-            .map((transaction) => transaction.bank ?? 'Outro')
-            .filter((bank): bank is 'Inter' | 'Caixa' | 'Sofisa' | 'BB' | 'Outro' => Boolean(bank)),
+            .map((transaction) => transaction.bankName ?? transaction.bank ?? 'Outro')
+            .filter(Boolean),
         ),
       ).sort(),
     [transactions],
@@ -144,7 +145,7 @@ export function TransactionTable({
 
     const filteredList = sortedTransactions.filter((transaction) => {
       const matchesSearch = !term || transaction.description.toLowerCase().includes(term);
-      const matchesBank = selectedBank === 'all' || (transaction.bank ?? 'Outro') === selectedBank;
+      const matchesBank = selectedBank === 'all' || (transaction.bankName ?? transaction.bank ?? 'Outro') === selectedBank;
       const matchesType = selectedType === 'all' || transaction.type === selectedType;
       const transactionMonth = getTransactionMonthKey(transaction.date);
       const matchesCategory =
@@ -179,20 +180,10 @@ export function TransactionTable({
   const topExpenses = useMemo(
     () =>
       [...transactions]
-        .filter(
-          (tx) =>
-            (tx.type === 'expense' || tx.amount < 0) &&
-            !tx.isNeutral &&
-            !tx.isInternalTransfer &&
-            !tx.isSelfTransfer &&
-            !tx.isInvestment &&
-            !tx.isCreditCardPayment &&
-            tx.category !== 'Pagamento de Fatura' &&
-            tx.categoryId !== 'pagamento_fatura',
-        )
+        .filter((tx) => isRealExpense(tx, categories))
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5),
-    [transactions],
+    [transactions, categories],
   );
 
   const onPageChange = (nextPage: number) => {
@@ -229,7 +220,7 @@ export function TransactionTable({
               </p>
               <p>
                 <span className="font-medium text-slate-800 dark:text-slate-100">Valor:</span>{' '}
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingDelete.amount)}
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: pendingDelete.currencyCode || 'BRL' }).format(pendingDelete.amount)}
               </p>
             </div>
             <div className="mt-6 flex justify-end gap-3">
@@ -262,7 +253,7 @@ export function TransactionTable({
               <select
                 value={selectedBank}
                 onChange={(event) => {
-                  setSelectedBank(event.target.value as 'all' | 'Inter' | 'Caixa' | 'Sofisa' | 'BB' | 'Outro');
+                  setSelectedBank(event.target.value);
                   setPage(1);
                 }}
                 className="h-10 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
@@ -393,14 +384,15 @@ export function TransactionTable({
                                   }}
                                 >
                                   {transaction.description}
+                                  {transaction.providerStatus === 'PENDING' && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Pendente</span>}
                                 </span>
                               )}
                               <div className="mt-1 flex flex-wrap items-center gap-2">
                                 <span className="text-xs text-slate-500 dark:text-slate-400">{transaction.type === 'income' ? 'Entrada' : 'Saída'}</span>
                                 <span
-                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${bankStyles[transaction.bank ?? 'Outro'] ?? bankStyles. Outro}`}
+                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${bankStyles[transaction.bankName ?? transaction.bank ?? 'Outro'] ?? bankStyles.Outro}`}
                                 >
-                                  {transaction.bank ?? 'Outro'}
+                                  {transaction.bankName ?? transaction.bank ?? 'Outro'}
                                 </span>
                                 {transaction.isCreditCardPayment && (
                                   <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -442,7 +434,7 @@ export function TransactionTable({
                                 {transaction.type === 'income' ? '+' : '-'}
                                 {new Intl.NumberFormat('pt-BR', {
                                   style: 'currency',
-                                  currency: 'BRL',
+                                  currency: transaction.currencyCode || 'BRL',
                                 }).format(transaction.amount)}
                               </span>
                             </div>
@@ -522,7 +514,7 @@ export function TransactionTable({
                         -
                         {new Intl.NumberFormat('pt-BR', {
                           style: 'currency',
-                          currency: 'BRL',
+                          currency: transaction.currencyCode || 'BRL',
                         }).format(transaction.amount)}
                       </span>
                     </div>

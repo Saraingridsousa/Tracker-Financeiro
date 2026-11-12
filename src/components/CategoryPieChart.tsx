@@ -12,7 +12,7 @@ interface CategoryPieChartProps {
 
 export function CategoryPieChart({ data }: CategoryPieChartProps) {
   return (
-    <div className="h-60 w-full">
+    <div className="h-60 w-full overflow-hidden">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie

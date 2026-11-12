@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { BankingPanel } from './components/BankingPanel';
+import { useBanking } from './hooks/useBanking';
+import { classifyTransaction, isRealExpense, isRealIncome, participatesInResult, summarizeTransactions } from './domain/finance';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { CategoryPieChart } from './components/CategoryPieChart';
 import { InvestmentsDashboard } from './components/InvestmentsDashboard';
@@ -23,7 +26,9 @@ import { TransactionTable } from './components/TransactionTable';
 import { useInvestments } from './hooks/useInvestments';
 import { parseBankFile } from './lib/parseBankFile';
 import { useTransactions } from './hooks/useTransactions';
-import type { BackupPayload, Category, Transaction } from './types/finance';
+import type { Category, Transaction } from './types/finance';
+import { parseLegacyBackup } from './domain/backup';
+import { filterTransactionsByPeriod } from './domain/period';
 
 const toneStyles = {
   emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
@@ -48,19 +53,6 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
-const parseISODate = (value: string) => {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
-};
-
-const normalizeDateToISO = (dateStr: string) => {
-  if (!dateStr) return '';
-  if (dateStr.includes('/')) {
-    const [day, month, year] = dateStr.split('/');
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  return dateStr.split('T')[0];
-};
 
 const formatBrazilianDate = (value: string) => {
   if (!value) return '';
@@ -83,43 +75,6 @@ const formatBrazilianDate = (value: string) => {
 const getMonthLabel = (date: Date) =>
   new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(date).replace('.', '');
 
-const filterTransactionsByPeriod = (items: Transaction[], period: (typeof periodOptions)[number]['value']) => {
-  if (period === 'all') return items;
-
-  const latestDate = items
-    .map((item) => normalizeDateToISO(item.date))
-    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
-    .sort((left, right) => right.localeCompare(left))[0];
-  const fallbackDate = new Date();
-  const referenceDate = latestDate ? parseISODate(latestDate) : fallbackDate;
-  const currentMonth = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
-  const startDate = new Date(currentMonth);
-
-  if (period === 'month') {
-    startDate.setMonth(currentMonth.getMonth());
-  }
-
-  if (period === 'last2months') {
-    startDate.setMonth(currentMonth.getMonth() - 1);
-  }
-
-  if (period === 'quarter') {
-    startDate.setMonth(currentMonth.getMonth() - 2);
-  }
-
-  if (period === 'semester') {
-    startDate.setMonth(currentMonth.getMonth() - 5);
-  }
-
-  if (period === 'year') {
-    startDate.setFullYear(currentMonth.getFullYear() - 1);
-  }
-
-  return items.filter((item) => {
-    const normalizedDate = normalizeDateToISO(item.date);
-    return /^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) && parseISODate(normalizedDate) >= startDate;
-  });
-};
 
 const buildMonthlyData = (items: Transaction[]) => {
   const grouped = new Map<string, { income: number; expenses: number; month: string; sortKey: string }>();
@@ -220,22 +175,11 @@ const formatMonthPeriodLabel = (yearMonth: string) => {
   return `${monthNames[month] || month}/${year.slice(2)}`;
 };
 
-const getRealExpenseTransactions = (items: Transaction[]) =>
-  items.filter(
-    (transaction) =>
-      (transaction.type === 'expense' || transaction.amount < 0) &&
-      !transaction.isNeutral &&
-      !transaction.isInternalTransfer &&
-      !transaction.isSelfTransfer &&
-      !transaction.isInvestment &&
-      !transaction.isCreditCardPayment &&
-      transaction.category !== 'Pagamento de Fatura' &&
-      transaction.categoryId !== 'pagamento_fatura',
-  );
+const getRealExpenseTransactions = (items: Transaction[], categories: Category[] = []) => items.filter((tx) => isRealExpense(tx, categories));
 
 const buildCategoryData = (items: Transaction[], categories: Category[]) => {
   const map = new Map<string, number>();
-  const validItems = getRealExpenseTransactions(items).filter((item) => {
+  const validItems = getRealExpenseTransactions(items, categories).filter((item) => {
     const hasCategoryName = Boolean(item.category && item.category.trim() !== '' && item.category.toLowerCase() !== 'sem categoria');
     const hasCategoryId = item.categoryId !== 'sem_categoria' && item.categoryId !== 'uncategorized';
     return hasCategoryName && hasCategoryId && Boolean(item.categoryId);
@@ -266,7 +210,7 @@ const buildIncomeCategoryData = (items: Transaction[], categories: Category[], p
   const isAllPeriods = !period || period === 'ALL' || period === 'all' || period.toLowerCase().includes('geral');
 
   const filtered = items.filter((item) => {
-    if (item.type !== 'income') return false;
+    if (!isRealIncome(item, categories)) return false;
 
     if (!isAllPeriods) {
       let itemPeriod = '';
@@ -310,7 +254,7 @@ const buildIncomeCategoryData = (items: Transaction[], categories: Category[], p
     .sort((a, b) => b.value - a.value);
 };
 
-function App() {
+function App({ now = () => new Date() }: { now?: () => Date } = {}) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -329,11 +273,13 @@ function App() {
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'investments'>('overview');
+  const banking = useBanking();
+  const [dataSource, setDataSource] = useState<'banking' | 'legacy'>('banking');
   const transactionsStore = useTransactions();
   const investmentsStore = useInvestments();
   const { portfolioSummary } = investmentsStore;
   const {
-    transactions,
+    transactions: legacyTransactions,
     categories,
     rules,
     addTransactions,
@@ -343,9 +289,9 @@ function App() {
     deleteCategory,
     addRule,
     deleteRule,
-    updateTransaction,
-    updateTransactionCategory,
-    deleteTransaction,
+    updateTransaction: updateLegacyTransaction,
+    updateTransactionCategory: updateLegacyCategory,
+    deleteTransaction: deleteLegacyTransaction,
     resetAllData,
     importBackup,
     exportBackup,
@@ -364,48 +310,40 @@ function App() {
     exportBackup: exportInvestmentBackup,
   } = investmentsStore;
 
+  const transactions = useMemo<Transaction[]>(() => {
+    const rows: Transaction[] = dataSource === 'legacy' ? legacyTransactions : banking.snapshot.transactions.map((tx) => {
+      const categoryId = tx.manualCategory && tx.categoryId ? tx.categoryId : inferCategory(tx.description, tx.type);
+      const category = categories.find((entry) => entry.id === categoryId);
+      return { ...tx, categoryId, categoryName: category?.name ?? 'Sem categoria', category: category?.name };
+    });
+    return rows.map((tx) => classifyTransaction(tx, categories));
+  }, [dataSource, legacyTransactions, banking.snapshot.transactions, categories, rules]);
+
+  const updateTransactionCategory = (id: string, categoryId: string) => {
+    if (dataSource === 'banking') void banking.updateTransaction(id, { categoryId });
+    else updateLegacyCategory(id, categoryId);
+  };
+  const updateTransaction = (id: string, updates: Partial<Transaction>) => {
+    if (dataSource === 'banking') void banking.updateTransaction(id, { description: updates.description });
+    else updateLegacyTransaction(id, updates);
+  };
+  const deleteTransaction = (id: string) => {
+    if (dataSource === 'banking') void banking.hideTransaction(id);
+    else deleteLegacyTransaction(id);
+  };
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem('tracker-theme', theme);
   }, [theme]);
 
-  const filteredTransactions = useMemo(() => {
-    const periodTransactions = filterTransactionsByPeriod(transactions, selectedPeriod).filter(
-      (transaction) => !transaction.isSelfTransfer && !transaction.isInternalTransfer,
-    );
-    return periodTransactions;
-  }, [transactions, selectedPeriod]);
+  const periodReference = now();
+  const periodMonth = new Date(periodReference.getFullYear(), periodReference.getMonth(), 1).getTime();
+  const filteredTransactions = useMemo(() => filterTransactionsByPeriod(transactions, selectedPeriod, { source: dataSource, now: () => new Date(periodMonth) }), [transactions, selectedPeriod, dataSource, periodMonth]);
+  const summary = useMemo(() => ({ ...summarizeTransactions(filteredTransactions, categories), totalInvested: portfolioSummary.totalCurrentValue }), [categories, filteredTransactions, portfolioSummary.totalCurrentValue]);
 
-  const realExpenses = useMemo(() => getRealExpenseTransactions(filteredTransactions), [filteredTransactions]);
-
-  const summary = useMemo(() => {
-    const totalIncome = filteredTransactions
-      .filter((transaction) => transaction.type === 'income')
-      .reduce((sum, item) => sum + item.amount, 0);
-
-    const totalExpense = realExpenses.reduce((sum, item) => sum + item.amount, 0);
-
-    const totalInvested = portfolioSummary.totalCurrentValue;
-
-    const neutralTotal = filteredTransactions
-      .filter((transaction) => {
-        const category = categories.find((item) => item.id === transaction.categoryId);
-        return Boolean(category?.isNeutral || category?.excludeFromTotals);
-      })
-      .reduce((sum, item) => sum + item.amount, 0);
-
-    return {
-      balance: totalIncome - totalExpense,
-      income: totalIncome,
-      expenses: totalExpense,
-      averageExpense: totalExpense > 0 ? totalExpense / Math.max(1, filteredTransactions.filter((tx) => tx.type === 'expense').length) : 0,
-      neutralTotal,
-      totalInvested,
-    };
-  }, [categories, filteredTransactions, portfolioSummary.totalCurrentValue]);
-
-  const monthlyChartData = useMemo(() => buildMonthlyData(filteredTransactions), [filteredTransactions]);
+  const monthlyChartData = useMemo(() => buildMonthlyData(filteredTransactions.filter((tx) => participatesInResult(tx, categories))), [filteredTransactions, categories]);
 
   const categoryMonthOptions = useMemo(() => {
     const months = new Map<string, string>();
@@ -420,11 +358,11 @@ function App() {
   }, [transactions]);
 
   const filteredCategoryExpenses = useMemo(() => {
-    const base = getRealExpenseTransactions(filteredTransactions);
+    const base = getRealExpenseTransactions(filteredTransactions, categories);
     if (categoryChartPeriod === 'ALL') return base;
 
     return base.filter((transaction) => getTransactionMonthKey(transaction.date) === categoryChartPeriod);
-  }, [categoryChartPeriod, filteredTransactions]);
+  }, [categoryChartPeriod, filteredTransactions, categories]);
 
   const categoryChartData = useMemo(() => buildCategoryData(filteredCategoryExpenses, categories), [filteredCategoryExpenses, categories]);
 
@@ -512,7 +450,7 @@ function App() {
 
         const normalized = list.map((item) => {
           const importedCategory = normalizeImportedCategory(item.category ?? item.categoryName);
-          const fallbackCategoryId = inferCategory(item.description);
+          const fallbackCategoryId = inferCategory(item.description, item.type);
           const resolvedCategoryId =
             importedCategory && categories.some((category) => category.name.toLowerCase() === importedCategory.toLowerCase())
               ? categories.find((category) => category.name.toLowerCase() === importedCategory.toLowerCase())?.id ?? fallbackCategoryId
@@ -535,6 +473,7 @@ function App() {
       }
 
       addTransactions(parsed);
+      setDataSource('legacy');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível importar este arquivo.';
       window.alert(message);
@@ -561,15 +500,21 @@ function App() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const text = await file.text();
-    const payload = JSON.parse(text) as BackupPayload;
-    importBackup(payload);
-    importInvestmentBackup({
-      assets: payload.assets ?? [],
-      investmentOrders: payload.investmentOrders ?? [],
-      exportedAt: payload.exportedAt ?? new Date().toISOString(),
-    });
-    event.target.value = '';
+    try {
+      const payload = parseLegacyBackup(await file.text());
+      importBackup(payload);
+      if (payload.assets && payload.investmentOrders) {
+        importInvestmentBackup({
+          assets: payload.assets,
+          investmentOrders: payload.investmentOrders,
+          exportedAt: payload.exportedAt,
+        });
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Não foi possível restaurar este backup.');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   const clearAllData = () => {
@@ -601,7 +546,7 @@ function App() {
                 >
                   {periodOptions.map((option) => (
                     <option key={option.value} value={option.value}>
-                      {option.label}
+                      {dataSource === 'legacy' && option.value === 'month' ? 'Último mês importado' : option.label}
                     </option>
                   ))}
                 </select>
@@ -645,7 +590,7 @@ function App() {
                       }}
                       className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
-                      <span>Fazer backup dos dados (.json)</span>
+                      <span>Backup do histórico e preferências (.json)</span>
                     </button>
 
                     <button
@@ -712,6 +657,11 @@ function App() {
             </div>
           </div>
         </header>
+        <BankingPanel banking={banking} />
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <label className="text-sm font-medium">Dados do painel <select aria-label="Fonte dos dados" value={dataSource} onChange={(event) => setDataSource(event.target.value as 'banking' | 'legacy')} className="ml-2 rounded-lg border border-slate-300 bg-transparent p-2 dark:border-slate-700"><option value="banking">Bancos conectados</option><option value="legacy">Histórico importado</option></select></label>
+          <p className="max-w-2xl text-xs text-slate-500">Fontes separadas para não contar os mesmos gastos duas vezes. Resultado liquidado em BRL não é saldo bancário; saldos por conta aparecem acima. Pendentes e outras moedas não entram nesses totais.</p>
+        </section>
 
         <div className="mb-6 flex justify-start">
           <div className="inline-flex items-center justify-start gap-1 rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
@@ -741,7 +691,7 @@ function App() {
 
         {activeTab === 'overview' ? (
           <>
-            {transactions.length === 0 ? (
+            {dataSource === 'banking' ? (transactions.length === 0 ? <section className="rounded-xl bg-cyan-50 p-5 text-sm text-cyan-900 dark:bg-cyan-950 dark:text-cyan-100">Nenhuma movimentação bancária armazenada ainda. Configure o Meu Pluggy e sincronize a conexão no painel acima. Seus arquivos antigos continuam disponíveis em Histórico importado.</section> : null) : transactions.length === 0 ? (
               <section
                 className={`mb-8 rounded-2xl border-2 border-dashed p-8 transition ${
                   isDragging ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70'
@@ -764,7 +714,7 @@ function App() {
                   <div>
                     <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Seu painel está limpo</h2>
                     <p className="mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-                      Comece importando um extrato .OFX, .CSV, .PDF ou .XLSX para visualizar seus gastos, receitas e categorias em tempo real.
+                      Comece importando um extrato .OFX, .CSV, .PDF ou .XLSX para visualizar seus gastos, receitas e categorias a partir dos arquivos escolhidos.
                     </p>
                     <p className="mt-2 text-xs font-medium uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
                       Formatos suportados: .OFX, .CSV, .PDF, .XLSX
@@ -800,9 +750,9 @@ function App() {
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: 'Saldo atual', value: summary.balance, icon: Wallet, tone: 'emerald' },
-            { label: 'Entradas', value: summary.income, icon: ArrowUpCircle, tone: 'cyan' },
-            { label: 'Saídas', value: summary.expenses, icon: ArrowDownCircle, tone: 'rose' },
+            { label: 'Resultado do período', value: summary.balance, icon: Wallet, tone: 'emerald' },
+            { label: 'Entradas liquidadas', value: summary.income, icon: ArrowUpCircle, tone: 'cyan' },
+            { label: 'Saídas liquidadas', value: summary.expenses, icon: ArrowDownCircle, tone: 'rose' },
             { label: 'Total Investido', value: summary.totalInvested, icon: TrendingUp, tone: 'violet' },
           ].map(({ label, value, icon: Icon, tone }) => (
             <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
