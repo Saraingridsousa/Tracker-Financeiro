@@ -165,6 +165,16 @@ test('normalization preserves pending/foreign metadata and identifies only expli
   assert.throws(() => normalizeAccount({ ...bank, type: 'LOAN' }, ITEM), /dados/i);
 });
 
+test('normalization retains opaque provider identifiers without inventing a fallback identity', async () => {
+  const { normalizeTransaction } = await load();
+  const result = normalizeTransaction(tx({ providerId: 'institution-id:001', providerCode: '00042' }), card);
+  assert.equal(result.providerId, 'institution-id:001');
+  assert.equal(result.providerCode, '00042');
+  const missing = normalizeTransaction(tx(), card);
+  assert.equal(missing.providerId, null);
+  assert.equal(missing.providerCode, null);
+});
+
 test('money normalization distinguishes BANK debit/credit from card signs and keeps exact cents', async () => {
   const { normalizeAccount, normalizeTransaction, toCents } = await load();
   assert.equal(toCents(1.005), 101);

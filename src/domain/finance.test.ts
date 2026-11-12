@@ -55,3 +55,64 @@ test('Flags antigas de transferência genérica não excluem um Pix de terceiro'
   assert.equal(classifyTransaction({ ...base, isInternalTransfer: true, isSelfTransfer: false, isNeutral: true }).isNeutral, false);
   assert.equal(classifyTransaction({ ...base, categoryId: 'transferencia' }).isSelfTransfer, true);
 });
+
+test('Statement Payment já persistido com flag antiga falsa também não vira renda', () => {
+  const tx = { ...base, description: 'Statement Payment', type: 'income' as const, amount: 150, isCreditCardPayment: false, source: 'pluggy' as const };
+  assert.equal(finance.summarizeTransactions([tx]).income, 0);
+  assert.equal(classifyTransaction(tx).isCreditCardPayment, true);
+  assert.equal(classifyTransaction({ ...tx, description: 'Statement Payment Refund' }).isCreditCardPayment, false);
+});
+
+const healthCategories: Category[] = [
+  { id: 'saude', name: 'Saúde', color: '#000', keywords: ['clinica'], type: 'expense' },
+  { id: 'investimentos', name: 'Investimentos', color: '#000', keywords: ['cdb'], type: 'both', isNeutral: true },
+];
+
+test('Categoria específica e regra de Saúde vencem regex de aplicação no resumo financeiro', () => {
+  const description = 'PIX CLINICA APLICACAO DE INSULINA';
+  const rules: Rule[] = [{ id: 'insulina', categoryId: 'saude', keywords: ['aplicacao de insulina'], isActive: true }];
+  for (const appliedRules of [[], rules]) {
+    // With rules, remove the Saúde keyword: only the explicit rule can select it.
+    const available = appliedRules.length ? healthCategories.map(c => c.id === 'saude' ? { ...c, keywords: [] } : c) : healthCategories;
+    const categoryId = finance.inferCategory(description, available, appliedRules, 'expense');
+    const tx = { ...base, amount: 45, description, categoryId };
+    assert.equal(categoryId, 'saude');
+    assert.equal(finance.summarizeTransactions([tx], healthCategories).expenses, 45);
+    assert.equal(classifyTransaction(tx, healthCategories).isInvestment, false);
+  }
+});
+
+test('Correção manual Saúde recalcula flags antigas e recupera a despesa de aplicação clínica', () => {
+  const tx = { ...base, amount: 45, description: 'APLICACAO DE INSULINA', categoryId: 'saude', manualCategory: true, isInvestment: true, isNeutral: true };
+  const classified = classifyTransaction(tx, healthCategories);
+  assert.equal(classified.isInvestment, false);
+  assert.equal(classified.isNeutral, false);
+  assert.equal(finance.summarizeTransactions([classified], healthCategories).expenses, 45);
+});
+
+test('Investimentos reais, fallback sem categoria e proventos mantêm políticas distintas', () => {
+  for (const categoryId of ['investimentos', 'uncategorized', 'categoria-removida']) {
+    const tx = { ...base, amount: 100, description: 'APLICACAO CDB', categoryId };
+    const result = finance.summarizeTransactions([tx], healthCategories);
+    assert.equal(classifyTransaction(tx, healthCategories).isInvestment, true);
+    assert.equal(result.expenses, 0);
+    assert.equal(result.totalInvested, 100);
+  }
+  const redemption = { ...base, amount: 70, type: 'income' as const, description: 'RESGATE TESOURO', categoryId: 'investimentos' };
+  assert.equal(finance.summarizeTransactions([redemption], healthCategories).totalInvested, -70);
+  const yieldIncome = { ...redemption, amount: 10, categoryId: 'proventos' };
+  assert.equal(finance.summarizeTransactions([yieldIncome], healthCategories).income, 10);
+  assert.equal(classifyTransaction(yieldIncome, healthCategories).isInvestment, false);
+});
+
+test('Categoria neutra e marcações explícitas de transferência/fatura continuam fora do resultado', () => {
+  const policies: Category[] = [...healthCategories,
+    { id: 'ajuste', name: 'Ajuste', color: '#000', keywords: [], type: 'both', isNeutral: true },
+    { id: 'fora', name: 'Fora', color: '#000', keywords: [], type: 'both', excludeFromTotals: true },
+  ];
+  for (const extra of [{ categoryId: 'ajuste' }, { categoryId: 'fora' }, { categoryId: 'saude', isSelfTransfer: true }, { categoryId: 'saude', isCreditCardPayment: true }]) {
+    const tx = { ...base, description: 'APLICACAO DE INSULINA', manualCategory: true, ...extra };
+    assert.equal(finance.summarizeTransactions([tx], policies).expenses, 0);
+    assert.equal(classifyTransaction(tx, policies).isNeutral, true);
+  }
+});

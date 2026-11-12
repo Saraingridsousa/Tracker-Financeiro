@@ -108,19 +108,23 @@ export function toCents(value) {
 }
 
 export function normalizeAccount(account, itemId) {
-  if (!validId(account.id) || !['BANK','CREDIT'].includes(account.type) || typeof account.name !== 'string' || !currency(account.currencyCode)) throw new Error('Dados de conta inválidos.');
+  if ((account.itemId !== undefined && account.itemId !== itemId) || !validId(account.id) || !['BANK','CREDIT'].includes(account.type) || typeof account.name !== 'string' || !currency(account.currencyCode)) throw new Error('Dados de conta inválidos.');
   return { id: account.id, itemId, name: account.name, type: account.type,
     currencyCode: account.currencyCode, balanceCents: toCents(account.balance) };
 }
 
 export function normalizeTransaction(transaction, account, bankName = '') {
-  if (!validId(transaction.id) || typeof transaction.description !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(transaction.date) || !Number.isFinite(Date.parse(transaction.date)) || !['POSTED','PENDING'].includes(transaction.status || 'POSTED') || !currency(transaction.currencyCode || account.currencyCode)) throw new Error('Dados de transação inválidos.');
+  if ((transaction.accountId !== undefined && transaction.accountId !== account.id) || !validId(transaction.id) || typeof transaction.description !== 'string' || !validTransactionDate(transaction.date) || !['POSTED','PENDING'].includes(transaction.status || 'POSTED') || !currency(transaction.currencyCode || account.currencyCode)) throw new Error('Dados de transação inválidos.');
+  const originalAmountCents = toCents(transaction.amount);
   const converted = transaction.currencyCode && transaction.currencyCode !== account.currencyCode && transaction.amountInAccountCurrency != null;
   const value = converted ? transaction.amountInAccountCurrency : transaction.amount;
   const type = account.type === 'CREDIT'
     ? (transaction.amount < 0 ? 'income' : 'expense')
     : transaction.type === 'DEBIT' ? 'expense' : transaction.type === 'CREDIT' ? 'income' : transaction.amount < 0 ? 'expense' : 'income';
   return { id: `${encodeURIComponent(account.id)}:${encodeURIComponent(transaction.id)}`, providerTransactionId: transaction.id, accountId: account.id,
+    providerId: transaction.providerId ?? null, providerCode: transaction.providerCode ?? null,
+    originalAmountCents, originalCurrencyCode: transaction.currencyCode || account.currencyCode,
+    amountSource: converted ? 'provider.amountInAccountCurrency' : 'provider.amount', providerDate: transaction.date,
     date: transaction.date.slice(0, 10), description: transaction.description, amountCents: Math.abs(toCents(value)),
     type, categoryId: null, manualCategory: false, source: 'pluggy', providerStatus: transaction.status || 'POSTED',
     currencyCode: converted ? account.currencyCode : transaction.currencyCode || account.currencyCode, bankName, createdAt: transaction.createdAt || transaction.date,
@@ -130,8 +134,15 @@ export function normalizeTransaction(transaction, account, bankName = '') {
     creditCardMetadata: { ...pick(transaction.creditCardMetadata, ['installmentNumber','totalInstallments','purchaseDate','billId']),
       ...(transaction.creditCardMetadata?.totalAmount != null ? { totalAmountCents: toCents(transaction.creditCardMetadata.totalAmount) } : {}),
     },
-    isCreditCardPayment: /^(?:pagamento (?:de )?fatura|credit card payment|invoice payment)$/i.test(transaction.description.trim()) || /^(?:credit card payment|pagamento de fatura)$/i.test(transaction.category || '') || /^(?:PAGAMENTO_FATURA|CREDIT_CARD_PAYMENT)$/.test(transaction.operationType || ''),
+    isCreditCardPayment: /^(?:pagamento (?:de )?fatura|credit card payment|invoice payment|statement payment)$/i.test(transaction.description.trim()) || /^(?:credit card payment|pagamento de fatura)$/i.test(transaction.category || '') || /^(?:PAGAMENTO_FATURA|CREDIT_CARD_PAYMENT)$/.test(transaction.operationType || ''),
   };
+}
+
+function validTransactionDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value) || !Number.isFinite(Date.parse(value))) return false;
+  const civil = value.slice(0, 10);
+  const parsed = new Date(civil + 'T00:00:00Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === civil;
 }
 
 const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 200 && !/[\u0000-\u001f]/.test(value);

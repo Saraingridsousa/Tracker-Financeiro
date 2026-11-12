@@ -7,16 +7,24 @@ export interface Transaction {
   id: string;
   date: string; // ISO date YYYY-MM-DD
   description: string;
-  amount: number; // positive value in cents or units; use number for simplicity
+  amount: number; // positive currency units for display; banking persistence uses amountCents
   type: TransactionType;
   categoryId: string;
   categoryName?: string;
   source: 'manual' | 'import' | 'pluggy';
   providerStatus?: 'POSTED' | 'PENDING';
   providerTransactionId?: string;
+  providerId?: string | null;
+  providerCode?: string | null;
+  identityId?: string;
+  supersededBy?: string | null;
   accountId?: string;
   currencyCode?: string;
   amountCents?: number;
+  originalAmountCents?: number; // signed value reported in the original currency
+  originalCurrencyCode?: string;
+  amountSource?: 'provider.amount' | 'provider.amountInAccountCurrency';
+  providerDate?: string;
   manualCategory?: boolean;
   isInternalTransfer?: boolean;
   isSelfTransfer?: boolean;
