@@ -22,3 +22,9 @@ Registrar os itemIds conhecidos da modalidade MeuPluggy, sem enumeração nem cr
 O PC precisa estar executando o app para receber consultas locais. A atualização do banco continua no ritmo da Pluggy, não do botão do Tracker. A integração tem terceiro envolvido mesmo com banco local. Dados importados anteriormente ficam separados até migração/reconciliação explícita; não misturar fontes com uma deduplicação por descrição/valor.
 
 As alterações não commitadas de investimentos no checkout principal não são abrangidas por esta branch; precisam de integração posterior com revisão.
+
+## Verificação em 12/11/2026
+
+Node 22.18.0 e npm 10.9.3 foram exercitados no Windows/PowerShell. `npm start` serve o build pelo backend próprio; `npm run dev` inicia Vite + backend em loopback. Portas ocupadas/configuração inválida e encerramento das árvores próprias foram verificados com dados externos sintéticos. Configuração padrão continua `%LOCALAPPDATA%/TrackerFinanceiro/config.env`, banco em `%LOCALAPPDATA%/TrackerFinanceiro/tracker.sqlite`. Nenhuma configuração financeira real foi criada.
+
+O audit do lockfile existente identificou alertas no toolchain de desenvolvimento e no importador opcional xlsx. Para uso cotidiano, adota-se o build com servidor próprio. Não houve migração incidental de Vite/SheetJS nem alteração de lockfile; riscos e próxima manutenção constam no STATUS. Esta decisão não promete que loopback elimina todos os riscos de um servidor de desenvolvimento.
