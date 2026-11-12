@@ -6,7 +6,7 @@ Finanças pessoais em React/TypeScript, com consulta de contas e movimentações
 
 ## Executar
 
-Requer **Node.js 22.18 ou superior** (SQLite nativo) e npm. Para uso cotidiano, prefira a versão compilada abaixo; o servidor de desenvolvimento tem alertas de dependências registrados em `docs/STATUS.md`.
+Requer **Node.js 22.18 ou superior** (SQLite nativo) e npm. Para uso cotidiano, prefira a versão compilada abaixo. A manutenção de segurança e suas verificações estão registradas em `docs/STATUS.md`.
 
 ```sh
 npm ci
@@ -31,7 +31,7 @@ No PowerShell, se `npm.ps1` for bloqueado pela política de scripts, use `npm.cm
 
 1. Crie/acesse sua conta no [Meu Pluggy](https://meu.pluggy.ai) e autorize seus próprios bancos ali.
 2. No Dashboard Pluggy, usando a mesma conta, escolha o conector **MeuPluggy**. Não escolha o banco diretamente nem Sandbox: o modo pessoal usa o proxy dos consentimentos existentes.
-3. No Windows, crie `%LOCALAPPDATA%/TrackerFinanceiro/config.env`, **fora do checkout e do OneDrive**, usando `.env.example` como modelo. Preencha `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` somente nesse arquivo privado. Não envie chaves, senhas ou códigos pelo chat. Não use variáveis `VITE_*` para segredos.
+3. No Windows, use `%LOCALAPPDATA%/TrackerFinanceiro/config.env`, **fora do checkout e do OneDrive**. Um modelo vazio já foi preparado neste PC; numa instalação nova, crie-o usando `.env.example`. Preencha `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` somente nesse arquivo privado. Não envie chaves, senhas ou códigos pelo chat. Não use variáveis `VITE_*` para segredos.
 4. Reinicie `npm run dev` ou `npm start` após configurar o arquivo. É possível indicar outro arquivo privado pela variável de ambiente `TRACKER_ENV_FILE`.
 5. Copie o `itemId` autorizado e registre-o no painel **Bancos conectados**. Clique em **Sincronizar dados** para consultar contas, saldos e transações disponíveis.
 
@@ -83,6 +83,6 @@ Mês bancário usa o relógio local do PC; histórico usa a maior data válida d
 
 ## Verificação e limites conhecidos
 
-Suíte oficial: 114 testes, zero falhas/skips; TypeScript/Vite build passou. Chrome isolado: 24 verificações com HTTP/SQLite reais e transporte Pluggy sintético. Comandos de execução: seis checks. Graphify local atualizado; detalhes, matriz PG-A01–PG-A10 e evidências em `docs/STATUS.md`. Isso não valida bancos reais.
+Suíte oficial: 117 testes, zero falhas/skips; TypeScript/Vite build passou. Chrome isolado: 25 verificações (incluindo importação Excel pelo build) com HTTP/SQLite reais e transporte Pluggy sintético. Comandos de execução: seis checks. Graphify local atualizado; detalhes, matriz PG-A01–PG-A10 e evidências em `docs/STATUS.md`. Isso não valida bancos reais.
 
-`npm audit` retornou cinco alertas no lockfile existente (três high, dois moderate). Vite/esbuild e duas dependências transitivas pertencem ao desenvolvimento/build; `npm start` usa o servidor estático próprio. `xlsx@0.18.5` pertence ao importador opcional de planilhas: evite arquivos não confiáveis. Não houve atualização de dependências; a manutenção direcionada permanece registrada no STATUS. O bundle principal acima de 500 kB e o aviso experimental do SQLite também permanecem.
+Os cinco alertas anteriores foram corrigidos: Vite 6.4.6/esbuild 0.25.12, postcss-selector-parser 6.1.6, source-map-js 1.2.2 e SheetJS 0.20.3. O `npm audit --json` atual retornou exit 0 e zero vulnerabilidades reportadas; isso não é auditoria integral do aplicativo. O `xlsx` usa a [distribuição oficial](https://docs.sheetjs.com/docs/getting-started/installation/nodejs/) com URL versionada e integridade fixada no lockfile. A instalação limpa foi verificada sem alterar o lockfile. Os controles Excel cobrem arquivos sintéticos `.xls`/`.xlsx` com datas e valores textuais brasileiros; não corrigem todos os formatos legados. O bundle principal acima de 500 kB, o aviso experimental do SQLite e a depreciação da linha Recharts 2 permanecem documentados.
