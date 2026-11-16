@@ -1,3 +1,4 @@
+import { parseLegacyBackup } from '../shared/legacyBackup.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 
@@ -6,7 +7,7 @@ export class Store {
     this.db = new DatabaseSync(filename);
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (version > 2) { this.db.close(); throw new Error('Versão do banco não suportada.'); }
+    if (version > 3) { this.db.close(); throw new Error('Versão do banco não suportada.'); }
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.exec(`CREATE TABLE IF NOT EXISTS connections (
@@ -35,9 +36,28 @@ export class Store {
         );
         PRAGMA user_version = 2;
       `);
+      if (version < 3) this.db.exec('CREATE TABLE shared_state (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL CHECK(revision>0), data TEXT NOT NULL); PRAGMA user_version=3;');
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); this.db.close(); throw error; }
-    this.schemaVersion = 2;
+    this.schemaVersion = 3;
+  }
+
+  sharedState() {
+    const row = this.db.prepare('SELECT revision,data FROM shared_state WHERE id=1').get();
+    return row ? { revision: row.revision, payload: JSON.parse(row.data) } : { revision: 0, payload: null };
+  }
+
+  saveSharedState(revision, payload) {
+    if (!Number.isSafeInteger(revision) || revision < 0 || !payload || !Array.isArray(payload.assets) || !Array.isArray(payload.investmentOrders)) throw new Error('Documento inválido.');
+    const validated = parseLegacyBackup(JSON.stringify(payload));
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const current = this.sharedState().revision;
+      if (revision !== current) { const error = new Error('Conflito de revisão.'); error.code = 'REVISION_CONFLICT'; throw error; }
+      if (!Number.isSafeInteger(current + 1)) throw new Error('Limite de revisão.');
+      this.db.prepare('INSERT INTO shared_state(id,revision,data) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,data=excluded.data').run(current+1,JSON.stringify(validated));
+      const saved = this.sharedState();this.db.exec('COMMIT');return saved;
+    } catch(error) { this.db.exec('ROLLBACK');throw error; }
   }
 
   registerConnection({ itemId, label }) {
@@ -163,7 +183,7 @@ export class Store {
   }
 
   backup() {
-    return { schemaVersion: this.schemaVersion, exportedAt: new Date().toISOString(), connections: this.connections(),
+    return { schemaVersion: 2, exportedAt: new Date().toISOString(), connections: this.connections(),
       accounts: this.snapshot(false).accounts,
       transactions: this.db.prepare('SELECT * FROM transactions ORDER BY id').all().map(r => ({ ...JSON.parse(r.data), identityId: r.identity_id, supersededBy: r.superseded_by, amountCents: r.amount_cents })),
       reconciliations: this.db.prepare('SELECT * FROM transaction_reconciliations ORDER BY id').all().map(r => ({

@@ -109,7 +109,7 @@ test('SQLite versioned store persists registered connections across reopening', 
   const dir = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'tracker-store-'));
   try {
     let store = new Store(join(dir, 'tracker.sqlite'));
-    assert.equal(store.schemaVersion, 2);
+    assert.equal(store.schemaVersion, 3);
     assert.deepEqual(store.snapshot(false), { configured: false, connections: [], accounts: [], transactions: [] });
     const connection = store.registerConnection({ itemId: ITEM, label: 'Banco sintético' });
     assert.equal(connection.id, ITEM);

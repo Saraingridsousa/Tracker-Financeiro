@@ -16,6 +16,7 @@ if (process.argv.includes('--help')) {
 const defaultDataDir = process.platform === 'win32' ? join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'TrackerFinanceiro') : join(homedir(), '.local', 'share', 'TrackerFinanceiro');
 const envFile = process.env.TRACKER_ENV_FILE || join(process.env.TRACKER_DATA_DIR || defaultDataDir, 'config.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
+if (!process.argv.includes('--production') && (process.env.TRACKER_PRIVATE_ORIGIN !== undefined || process.env.TRACKER_PRIVATE_USER !== undefined)) throw new Error('Acesso privado exige build e npm start; desenvolvimento não autorizado neste modo.');
 const children = [];
 let stopping = false;
 function stop(code = 0) {

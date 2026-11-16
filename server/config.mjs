@@ -1,3 +1,4 @@
+import { parsePrivateAccess } from './access.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -19,7 +20,7 @@ export function loadConfig({ env = process.env, cwd = process.cwd() } = {}) {
   }
   const portText = env.TRACKER_PORT ?? '3001';
   if (!/^\d+$/.test(portText) || Number(portText) < 1 || Number(portText) > 65535) throw new Error('Porta TRACKER_PORT inválida.');
-  return { port: Number(portText), dataDir: env.TRACKER_DATA_DIR ? resolve(cwd, env.TRACKER_DATA_DIR) : resolve(env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'TrackerFinanceiro'),
+  return { privateAccess: parsePrivateAccess(env.TRACKER_PRIVATE_ORIGIN, env.TRACKER_PRIVATE_USER), port: Number(portText), dataDir: env.TRACKER_DATA_DIR ? resolve(cwd, env.TRACKER_DATA_DIR) : resolve(env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'TrackerFinanceiro'),
     clientId: env.PLUGGY_CLIENT_ID ?? local.PLUGGY_CLIENT_ID,
     clientSecret: env.PLUGGY_CLIENT_SECRET ?? local.PLUGGY_CLIENT_SECRET,
   };

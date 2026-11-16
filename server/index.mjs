@@ -13,7 +13,7 @@ export async function startServer({ env = process.env, cwd = process.cwd(), port
   mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
   const store = new Store(join(config.dataDir, 'tracker.sqlite'));
   const pluggy = new PluggyClient({ clientId: config.clientId, clientSecret: config.clientSecret, fetchImpl });
-  const server = createAppServer({ store, pluggy, distDir });
+  const server = createAppServer({ store, pluggy, distDir, privateAccess: config.privateAccess });
   try {
     server.listen(port ?? config.port, '127.0.0.1');
     await once(server, 'listening');

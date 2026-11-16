@@ -1,10 +1,13 @@
+import { parsePrivateAccess, authorizeRequest } from './access.mjs';
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { PluggyError } from './pluggy.mjs';
 import { fileURLToPath } from 'node:url';
 import { HttpError, serveStatic } from './static.mjs';
 
-export function createAppServer({ store, pluggy, now = () => new Date(), distDir = fileURLToPath(new URL('../dist/', import.meta.url)) } = {}) {
+export function createAppServer({ store, pluggy, now = () => new Date(), privateAccess: suppliedAccess, distDir = fileURLToPath(new URL('../dist/', import.meta.url)) } = {}) {
+  const privateAccess = suppliedAccess === undefined ? undefined : parsePrivateAccess(suppliedAccess.origin, suppliedAccess.user);
+  const snapshot = () => ({ ...store.snapshot(pluggy.configured), ...(privateAccess ? { accessMode: 'private' } : {}) });
   const csrfToken = randomBytes(32).toString('base64url');
   const syncing = new Set();
   const server = createServer((req, res) => { handle(req, res).catch(error => {
@@ -16,9 +19,7 @@ export function createAppServer({ store, pluggy, now = () => new Date(), distDir
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     const port = server.address()?.port;
-    const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, '127.0.0.1:5173', 'localhost:5173']);
-    const origins = new Set([...hosts].map(host => `http://${host}`));
-    if (!hosts.has(req.headers.host) || (req.headers.origin !== undefined && !origins.has(req.headers.origin))) return send(res, 403, { error: 'Host ou Origin não autorizado.' });
+    authorizeRequest(req, port, privateAccess);
     if (req.headers.origin) {
       res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
       res.setHeader('Vary', 'Origin');
@@ -29,23 +30,29 @@ export function createAppServer({ store, pluggy, now = () => new Date(), distDir
       res.writeHead(204); return res.end();
     }
     if (req.method === 'GET' && req.url === '/api/session') return send(res, 200, { csrfToken });
-    if (req.method === 'GET' && req.url === '/api/banking') return send(res, 200, store.snapshot(pluggy.configured));
+    if (req.method === 'GET' && req.url === '/api/banking') return send(res, 200, snapshot());
     if (req.method === 'GET' && req.url === '/api/backup') {
       res.setHeader('Content-Disposition', 'attachment; filename="tracker-backup.json"');
       return send(res, 200, store.backup());
     }
+    if (req.method === 'GET' && req.url === '/api/shared-state') return send(res, 200, store.sharedState());
     let body;
     if (['POST','PATCH','DELETE'].includes(req.method)) {
       const token = req.headers['x-tracker-csrf'];
       if (typeof token !== 'string' || Buffer.byteLength(token) !== Buffer.byteLength(csrfToken) || !timingSafeEqual(Buffer.from(token), Buffer.from(csrfToken))) throw new HttpError(403, 'Token CSRF inválido. Recarregue o aplicativo.');
       if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(req.headers['content-type'] || '')) throw new HttpError(415, 'Envie Content-Type application/json.');
-      body = await readJson(req);
+      body = await readJson(req, req.url === '/api/shared-state' ? 10 * 1024 * 1024 : 64 * 1024);
+    }
+    if (req.method === 'POST' && req.url === '/api/shared-state') {
+      if (Object.keys(body).some(key => !['revision','payload'].includes(key))) throw new HttpError(400, 'Documento compartilhado inválido.');
+      try { return send(res, 200, store.saveSharedState(body.revision, body.payload)); }
+      catch (error) { throw new HttpError(error.code === 'REVISION_CONFLICT' ? 409 : 400, error.code === 'REVISION_CONFLICT' ? 'Os dados foram alterados em outro aparelho. Exporte seu rascunho e recarregue antes de continuar.' : 'Documento compartilhado inválido. Nenhum dado foi alterado.'); }
     }
     if (req.method === 'POST' && req.url === '/api/connections') {
       if (Object.keys(body).some(k => !['itemId','label'].includes(k))) throw new HttpError(400, 'Campos de conexão inválidos.');
       try { store.registerConnection(body); }
       catch { throw new HttpError(400, 'Conexão inválida, já registrada ou limite de cinco conexões atingido. Informe UUID e nome válidos.'); }
-      return send(res, 201, store.snapshot(pluggy.configured));
+      return send(res, 201, snapshot());
     }
     const transactionMatch = /^\/api\/transactions\/([^/]+)$/.exec(req.url);
     if (['PATCH','DELETE'].includes(req.method) && transactionMatch) {
@@ -59,7 +66,7 @@ export function createAppServer({ store, pluggy, now = () => new Date(), distDir
           store.hideTransaction(id);
         }
       } catch { throw new HttpError(400, 'Campos de edição inválidos.'); }
-      return send(res, 200, store.snapshot(pluggy.configured));
+      return send(res, 200, snapshot());
     }
     const syncMatch = /^\/api\/connections\/([^/]+)\/sync$/.exec(req.url);
     if (req.method === 'POST' && syncMatch) {
@@ -76,7 +83,7 @@ export function createAppServer({ store, pluggy, now = () => new Date(), distDir
         store.recordSyncError(id, message);
         throw new HttpError(error instanceof PluggyError && error.code === 'CONFIG' ? 503 : 502, message);
       } finally { syncing.delete(id); }
-      return send(res, 200, store.snapshot(pluggy.configured));
+      return send(res, 200, snapshot());
     }
     if (['GET','HEAD'].includes(req.method) && !req.url.startsWith('/api/')) return serveStatic(req, res, distDir);
     send(res, 404, { error: 'Não encontrado.' });
@@ -100,14 +107,13 @@ function decodeId(value) {
   catch { throw new HttpError(400, 'Identificador inválido.'); }
 }
 
-function readJson(req) {
-  const limit = 64 * 1024;
-  if (Number(req.headers['content-length']) > limit) { req.resume(); throw new HttpError(413, 'Corpo excede 64 KB.'); }
+function readJson(req, limit) {
+  if (Number(req.headers['content-length']) > limit) { req.resume(); throw new HttpError(413, 'Corpo excede o limite de ' + (limit / 1024) + ' KB.'); }
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
     req.on('data', chunk => {
       size += chunk.length;
-      if (size > limit) { chunks.length = 0; reject(new HttpError(413, 'Corpo excede 64 KB.')); }
+      if (size > limit) { chunks.length = 0; reject(new HttpError(413, 'Corpo excede o limite de ' + (limit / 1024) + ' KB.')); }
       else chunks.push(chunk);
     });
     req.on('end', () => {
