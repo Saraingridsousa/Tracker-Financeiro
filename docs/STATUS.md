@@ -26,7 +26,7 @@ Atualizado em 16/11/2026. Estado canônico do incremento PG-002; resultados de 1
 
 Revisão independente encontrou e fechou: proxy sem configuração privada; gravação local antes de modo confirmado; texto intermediário inválido de categoria; leitura de storage negada; recuperação coberta por modal. Regressões unitárias e Chrome cobrem os casos. A revisão também fortaleceu o teste de headers para usar a porta real e um controle permitido. O mapa orienta navegação; não é prova de segurança/finanças.
 
-**Próxima etapa concreta:** instalador oficial Tailscale 1.104.7 baixado somente no temporário; assinatura Windows Valid/Tailscale Inc. e SHA-256 do fornecedor conferidos (installer-preflight.json). Ainda não executado. Confirmação específica solicitada conforme Computer Use; login e confirmações do Windows ficam com Sara. Ativar Serve somente depois de configurar origem/login privados e conferir serviços existentes, conforme [roteiro](private-access.md). Banco real aguarda conexões/consentimentos e credenciais preenchidas privadamente. Não houve publicação, push, cobrança ou leitura financeira real.
+**Ativação em andamento:** Sara autorizou executar o instalador. Tailscale 1.104.7 instalado e serviço autenticado (Running), verificados na etapa de ativação; assinatura e SHA-256 do fornecedor conferidos antes da execução. O preflight encontrou Serve sem serviços e porta 3001 livre, mas nenhum ingresso privado foi ativado. Tracker iniciado somente em loopback para conferir/exportar o histórico e a carteira antigos. Computer Use interrompeu a navegação por não conseguir confirmar a URL atual com segurança. Próximo passo: conferir o backup, configurar origem/login privados, ativar Serve e testar no celular conforme [roteiro](private-access.md). Banco real continua aguardando conexões/consentimentos e configuração privada. Sem cobrança ou leitura financeira real.
 
 ## Entregas e autoridade
 
@@ -34,7 +34,7 @@ Revisão independente encontrou e fechou: proxy sem configuração privada; grav
 - Cinco alertas anteriores de dependências: **verified — corrigidos**; audit atual com exit 0 e zero vulnerabilidades reportadas. Não é auditoria integral de segurança.
 - Validação bancária real: **blocked**. Meu Pluggy e bancos prioritários já confirmados; faltam conexões/consentimentos e configuração privada. A autorização para prosseguir já foi recebida. Ainda não houve consulta financeira real nem comparação com bancos.
 - Checkout C:/Users/sarai/OneDrive/Documentos/Tracker-Financeiro-pluggy; branch feat/meu-pluggy-sync; base e066b54. Checkout original Tracker-Financeiro preservado: seis hashes iguais aos da sessão e ao manifesto histórico.
-- Não houve push, PR, publicação, cobrança, pagamentos, exposição de rede, mudança de Hermes/políticas do Windows ou leitura de credenciais reais.
+- Sara autorizou commit e push do código em 16/11. Entrega na branch feat/meu-pluggy-sync do origin; sem merge na main ou publicação do aplicativo. Tailscale instalado/autenticado; Serve privado ainda não ativado. Nenhuma cobrança, pagamento ou alteração de políticas do Windows.
 
 ## Commits locais
 
@@ -48,7 +48,7 @@ Revisão independente encontrou e fechou: proxy sem configuração privada; grav
 | 82f82eb | Aceite local inicial e documentação |
 | f1af2f6 | Correções direcionadas das dependências e regressão Excel |
 
-Documentação desta manutenção fica em commit próprio posterior, conferido no git log e no manifesto ignorado de entrega. Cada commit usa allowlist e revisão do diff staged/check; dados, segredos e evidências permanecem fora do Git.
+Documentação desta manutenção fica em commit próprio posterior, conferido no git log e no manifesto ignorado de entrega. Cada commit usa allowlist e revisão do diff staged/check; dados, segredos e evidências permanecem fora do Git. Os commits 9d7076e/4d3aabc/b02184c/73aa440 registram contrato, backend, interface e aceite do estado compartilhado; a atualização da ativação fica em commit documental próprio.
 
 ## Manutenção de dependências
 
