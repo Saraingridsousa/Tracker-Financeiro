@@ -1,3 +1,5 @@
+import type { Dispatch, SetStateAction } from 'react';
+import type { SharedBacking } from './useSharedFinance';
 import { useEffect, useMemo, useState } from 'react';
 
 import type { AssetPosition, AssetType, InvestmentBackupPayload, InvestmentOrder } from '../types/finance';
@@ -8,10 +10,10 @@ const ORDERS_KEY = 'tracker-financeiro:investment-orders';
 const readAssets = (): AssetPosition[] => {
   if (typeof window === 'undefined') return [];
 
-  const raw = window.localStorage.getItem(ASSETS_KEY);
-  if (!raw) return [];
-
   try {
+    const raw = window.localStorage.getItem(ASSETS_KEY);
+    if (!raw) return [];
+
     return JSON.parse(raw) as AssetPosition[];
   } catch {
     return [];
@@ -21,10 +23,10 @@ const readAssets = (): AssetPosition[] => {
 const readOrders = (): InvestmentOrder[] => {
   if (typeof window === 'undefined') return [];
 
-  const raw = window.localStorage.getItem(ORDERS_KEY);
-  if (!raw) return [];
-
   try {
+    const raw = window.localStorage.getItem(ORDERS_KEY);
+    if (!raw) return [];
+
     return JSON.parse(raw) as InvestmentOrder[];
   } catch {
     return [];
@@ -43,17 +45,22 @@ const persistOrders = (orders: InvestmentOrder[]) => {
 
 const parseCsvValue = (value: string) => value.trim();
 
-export const useInvestments = () => {
-  const [assets, setAssets] = useState<AssetPosition[]>(readAssets());
-  const [orders, setOrders] = useState<InvestmentOrder[]>(readOrders());
+export const useInvestments = (shared?: SharedBacking, localWritable = true) => {
+  const [localAssets, setLocalAssets] = useState<AssetPosition[]>(readAssets());
+  const [localOrders, setLocalOrders] = useState<InvestmentOrder[]>(readOrders());
+
+  const assets = shared?.payload?.assets ?? localAssets;
+  const orders = shared?.payload?.investmentOrders ?? localOrders;
+  const setAssets: Dispatch<SetStateAction<AssetPosition[]>> = shared ? update => shared.set('assets', update) : setLocalAssets;
+  const setOrders: Dispatch<SetStateAction<InvestmentOrder[]>> = shared ? update => shared.set('investmentOrders', update) : setLocalOrders;
 
   useEffect(() => {
-    persistAssets(assets);
-  }, [assets]);
+    if (!shared && localWritable) persistAssets(assets);
+  }, [assets, Boolean(shared), localWritable]);
 
   useEffect(() => {
-    persistOrders(orders);
-  }, [orders]);
+    if (!shared && localWritable) persistOrders(orders);
+  }, [orders, Boolean(shared), localWritable]);
 
   const addAsset = (asset: Omit<AssetPosition, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     const normalized: AssetPosition = {
@@ -228,7 +235,7 @@ export const useInvestments = () => {
   const resetAllData = () => {
     setAssets([]);
     setOrders([]);
-    if (typeof window !== 'undefined') {
+    if (!shared && localWritable && typeof window !== 'undefined') {
       window.localStorage.removeItem(ASSETS_KEY);
       window.localStorage.removeItem(ORDERS_KEY);
     }
@@ -258,5 +265,6 @@ export const useInvestments = () => {
     resetAllData,
     importBackup,
     exportBackup,
+    exportLocalBackup: (): InvestmentBackupPayload => ({ assets: localAssets, investmentOrders: localOrders, exportedAt: new Date().toISOString() }),
   };
 };

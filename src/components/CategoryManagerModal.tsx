@@ -1,5 +1,5 @@
 import { Plus, Trash2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Category, Rule } from '../types/finance';
 
@@ -161,9 +161,11 @@ export function CategoryManagerModal({
               {categories.map((category) => (
                 <div key={category.id} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <input
+                    <CategoryTextInput
                       value={category.name}
-                      onChange={(event) => onUpdateCategory(category.id, { name: event.target.value })}
+                      label={`Nome da categoria ${category.name}`}
+                      required
+                      onCommit={(name) => onUpdateCategory(category.id, { name })}
                       className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                     />
                     {!category.isDefault && (
@@ -185,11 +187,12 @@ export function CategoryManagerModal({
                       className="h-10 w-full rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900"
                     />
 
-                    <input
+                    <CategoryTextInput
                       value={category.keywords.join(', ')}
-                      onChange={(event) =>
+                      label={`Palavras-chave da categoria ${category.name}`}
+                      onCommit={(value) =>
                         onUpdateCategory(category.id, {
-                          keywords: event.target.value
+                          keywords: value
                             .split(',')
                             .map((keyword) => keyword.trim())
                             .filter(Boolean),
@@ -291,4 +294,16 @@ export function CategoryManagerModal({
       </div>
     </div>
   );
+}
+
+// Keep intermediate text local; shared storage accepts only complete valid documents.
+export function CategoryTextInput({ value, label, required = false, onCommit, className }: { value: string; label: string; required?: boolean; onCommit: (value: string) => void; className?: string }) {
+  const [draft, setDraft] = useState(value);
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setDraft(value); }, [value]);
+  return <input aria-label={label} title="Pressione Enter ou saia do campo para salvar" value={draft} className={className}
+    onFocus={() => { focused.current = true; }}
+    onChange={event => setDraft(event.target.value)}
+    onBlur={() => { focused.current = false; if (required && !draft.trim()) { setDraft(value); return; } if (draft !== value) onCommit(required ? draft.trim() : draft); }}
+    onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } if (event.key === 'Escape') setDraft(value); }} />;
 }

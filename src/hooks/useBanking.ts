@@ -9,15 +9,16 @@ export function useBanking() {
   const [snapshot, setSnapshot] = useState<BankingSnapshot>(empty);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(false);
   const generation = useRef(0);
   const refresh = useCallback(async () => {
     const requestGeneration = ++generation.current;
     try {
       const next = await api.load();
       if (requestGeneration !== generation.current) return false;
-      setSnapshot(next); setError(''); return true;
+      setSnapshot(next); setLoaded(true); setError(''); return true;
     } catch (err) {
-      if (requestGeneration === generation.current) setError(err instanceof Error ? err.message : 'Erro ao ler os dados bancários.');
+      if (requestGeneration === generation.current) { setError(err instanceof Error ? err.message : 'Erro ao ler os dados bancários.'); }
       return false;
     }
   }, []);
@@ -40,7 +41,7 @@ export function useBanking() {
     } catch { setError('Não foi possível exportar os dados bancários.'); return false; }
     finally { setBusy(false); }
   }
-  return { snapshot, busy, error, refresh, downloadBackup,
+  return { snapshot, loaded, busy, error, refresh, downloadBackup,
     addConnection: (itemId: string, label: string) => mutate('POST', '/api/connections', { itemId, label }),
     sync: (id: string) => mutate('POST', `/api/connections/${encodeURIComponent(id)}/sync`),
     updateTransaction: (id: string, updates: { categoryId?: string; description?: string }) => mutate('PATCH', `/api/transactions/${encodeURIComponent(id)}`, updates),

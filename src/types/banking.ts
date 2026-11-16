@@ -29,6 +29,7 @@ export interface BankTransaction extends Omit<Transaction, 'categoryId'> {
   currencyCode: string;
 }
 export interface BankingSnapshot {
+  accessMode?: 'local' | 'private';
   configured: boolean;
   connections: BankConnection[];
   accounts: BankAccount[];

@@ -1,3 +1,5 @@
+import { SharedFinancePanel } from './components/SharedFinancePanel';
+import { useSharedFinance } from './hooks/useSharedFinance';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -263,10 +265,12 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
   const [categoryChartPeriod, setCategoryChartPeriod] = useState<string>('ALL');
   const [incomeChartPeriod, setIncomeChartPeriod] = useState<string>('ALL');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
     if (typeof window !== 'undefined') {
       const savedTheme = window.localStorage.getItem('tracker-theme');
       if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
     }
+    } catch { /* Use the in-memory theme when storage is blocked. */ }
 
     return 'light';
   });
@@ -275,8 +279,9 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
   const [activeTab, setActiveTab] = useState<'overview' | 'investments'>('overview');
   const banking = useBanking();
   const [dataSource, setDataSource] = useState<'banking' | 'legacy'>('banking');
-  const transactionsStore = useTransactions();
-  const investmentsStore = useInvestments();
+  const shared = useSharedFinance(banking.snapshot.accessMode === 'private' || (typeof window !== 'undefined' && window.location?.protocol === 'https:'));
+  const transactionsStore = useTransactions(shared.backing, banking.loaded !== false);
+  const investmentsStore = useInvestments(shared.backing, banking.loaded !== false);
   const { portfolioSummary } = investmentsStore;
   const {
     transactions: legacyTransactions,
@@ -335,7 +340,7 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem('tracker-theme', theme);
+    try { window.localStorage.setItem('tracker-theme', theme); } catch { /* Theme remains in memory. */ }
   }, [theme]);
 
   const periodReference = now();
@@ -501,7 +506,9 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
     if (!file) return;
 
     try {
-      const payload = parseLegacyBackup(await file.text());
+      const text = await file.text();
+      if (shared.enabled) { shared.model?.restore(text); return; }
+      const payload = parseLegacyBackup(text);
       importBackup(payload);
       if (payload.assets && payload.investmentOrders) {
         importInvestmentBackup({
@@ -526,7 +533,13 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
     resetInvestments();
   };
 
-  return (
+  const browserCopy = () => ({ ...transactionsStore.exportLocalBackup(), ...investmentsStore.exportLocalBackup() });
+  const sharedPanel = <SharedFinancePanel shared={shared} browserCopy={browserCopy} />;
+  if (shared.enabled && !shared.status.payload) return sharedPanel;
+  return (<>
+    {sharedPanel}
+    {banking.loaded === false && banking.error && <div role="alert" className="m-4 rounded-xl bg-amber-50 p-4 text-amber-900"><p>{banking.error}</p><button type="button" className="mt-2 rounded-lg border px-3 py-2" onClick={() => void banking.refresh()}>Tentar ler o PC novamente</button></div>}
+    <fieldset disabled={banking.loaded === false || (shared.enabled && (shared.status.busy || Boolean(shared.status.error)))} className="min-w-0">
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-8 flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-soft backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
@@ -902,7 +915,8 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
         onDeleteRule={deleteRule}
       />
     </div>
-  );
+    </fieldset>
+  </>);
 }
 
 export default App;

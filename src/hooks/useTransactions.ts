@@ -1,3 +1,5 @@
+import type { Dispatch, SetStateAction } from 'react';
+import type { SharedBacking } from './useSharedFinance';
 import { useEffect, useMemo, useState } from 'react';
 import { classifyTransaction, inferCategory as inferCategoryFromRules, summarizeTransactions } from '../domain/finance';
 
@@ -42,12 +44,12 @@ const readStorage = (): { transactions: Transaction[]; categories: Category[] } 
     return { transactions: [], categories: defaultCategories };
   }
 
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return { transactions: [], categories: defaultCategories };
-  }
-
   try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return { transactions: [], categories: defaultCategories };
+    }
+
     const parsed = JSON.parse(raw) as { transactions?: Transaction[]; categories?: Category[] };
     return {
       transactions: sortTransactionsByDateDesc((parsed.transactions ?? []).map(classifyTransactionFlags)),
@@ -61,10 +63,10 @@ const readStorage = (): { transactions: Transaction[]; categories: Category[] } 
 const readRules = (): Rule[] => {
   if (typeof window === 'undefined') return [];
 
-  const raw = window.localStorage.getItem(RULES_KEY);
-  if (!raw) return [];
-
   try {
+    const raw = window.localStorage.getItem(RULES_KEY);
+    if (!raw) return [];
+
     return JSON.parse(raw) as Rule[];
   } catch {
     return [];
@@ -88,19 +90,26 @@ const sortTransactionsByDateDesc = (items: Transaction[]) =>
     return (a.id ?? '').localeCompare(b.id ?? '');
   });
 
-export const useTransactions = () => {
+export const useTransactions = (shared?: SharedBacking, localWritable = true) => {
   const initialData = readStorage();
-  const [transactions, setTransactions] = useState<Transaction[]>(sortTransactionsByDateDesc(initialData.transactions));
-  const [categories, setCategories] = useState<Category[]>(initialData.categories);
-  const [rules, setRules] = useState<Rule[]>(readRules());
+  const [localTransactions, setLocalTransactions] = useState<Transaction[]>(sortTransactionsByDateDesc(initialData.transactions));
+  const [localCategories, setLocalCategories] = useState<Category[]>(initialData.categories);
+  const [localRules, setLocalRules] = useState<Rule[]>(readRules());
+
+  const transactions = shared?.payload?.transactions ?? localTransactions;
+  const categories = shared?.payload?.categories ?? localCategories;
+  const rules = shared?.payload?.rules ?? localRules;
+  const setTransactions: Dispatch<SetStateAction<Transaction[]>> = shared ? update => shared.set('transactions', update) : setLocalTransactions;
+  const setCategories: Dispatch<SetStateAction<Category[]>> = shared ? update => shared.set('categories', update) : setLocalCategories;
+  const setRules: Dispatch<SetStateAction<Rule[]>> = shared ? update => shared.set('rules', update) : setLocalRules;
 
   useEffect(() => {
-    persist(transactions, categories);
-  }, [transactions, categories]);
+    if (!shared && localWritable) persist(transactions, categories);
+  }, [transactions, categories, Boolean(shared), localWritable]);
 
   useEffect(() => {
-    persistRules(rules);
-  }, [rules]);
+    if (!shared && localWritable) persistRules(rules);
+  }, [rules, Boolean(shared), localWritable]);
 
   const addTransactions = (incoming: Transaction[]) => {
     setTransactions((prev) => {
@@ -205,7 +214,7 @@ export const useTransactions = () => {
     setTransactions([]);
     setCategories(defaultCategories);
     setRules([]);
-    if (typeof window !== 'undefined') {
+    if (!shared && localWritable && typeof window !== 'undefined') {
       window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem(RULES_KEY);
     }
@@ -243,5 +252,6 @@ export const useTransactions = () => {
     resetAllData,
     importBackup,
     exportBackup,
+    exportLocalBackup: (): BackupPayload => ({ transactions: localTransactions, categories: localCategories, rules: localRules, exportedAt: new Date().toISOString() }),
   };
 };
