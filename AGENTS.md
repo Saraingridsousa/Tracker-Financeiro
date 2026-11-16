@@ -1,7 +1,7 @@
 # Tracker Financeiro — contrato de desenvolvimento
 
 - Desenvolvimento por especificações: consultar `docs/specs/pluggy-personal.md`, `docs/decisions/` e `docs/STATUS.md` antes de alterar comportamento.
-- Neste incremento, uso pessoal e servidor exclusivamente loopback. Acesso remoto não está autorizado.
+- Servidor exclusivamente loopback. Sara autorizou ingresso privado opcional PC/celular conforme docs/specs/private-shared.md e ADR 003; sem publicação pública.
 - Nenhum segredo, extrato real, banco SQLite ou estado de navegador entra no Git. Credenciais Pluggy são exclusivas do backend; nunca `VITE_*`.
 - Fluxo gratuito: contas autorizadas no Meu Pluggy e conector MeuPluggy no Dashboard. Sem criar conexão direta ao banco, contratar plano, iniciar pagamentos ou prometer tempo real.
 - Atualizar o aplicativo lê os dados já disponíveis na Pluggy; não força a atualização bancária do proxy.
