@@ -1,12 +1,12 @@
 # Estado — Tracker Financeiro / Meu Pluggy
 
-Atualizado em 12/11/2026. Estado canônico após a manutenção de segurança autorizada por Sara.
+Atualizado em 16/11/2026. Últimas verificações técnicas executadas em 12/11/2026; os resultados abaixo mantêm essa data. Estado canônico após a manutenção de segurança autorizada por Sara.
 
 ## Entregas e autoridade
 
 - Entrega técnica local: **verified**. Implementação, correções, dependências, suíte/build, runtime, preservação, Graphify e commits conferidos no escopo pessoal/loopback.
 - Cinco alertas anteriores de dependências: **verified — corrigidos**; audit atual com exit 0 e zero vulnerabilidades reportadas. Não é auditoria integral de segurança.
-- Validação bancária real: **blocked** por participação/configuração privada/consentimentos e definição dos bancos prioritários. A autorização para prosseguir já foi recebida. Ainda não houve consulta financeira real nem comparação com bancos.
+- Validação bancária real: **blocked**. Em 16/11 Sara confirmou conta na Pluggy e ausência de conexões bancárias. Falta distinguir Meu Pluggy de Dashboard, definir bancos prioritários e concluir configuração/consentimentos privados. A autorização para prosseguir já foi recebida. Ainda não houve consulta financeira real nem comparação com bancos.
 - Checkout C:/Users/sarai/OneDrive/Documentos/Tracker-Financeiro-pluggy; branch feat/meu-pluggy-sync; base e066b54. Checkout original Tracker-Financeiro preservado: seis hashes iguais aos da sessão e ao manifesto histórico.
 - Não houve push, PR, publicação, cobrança, pagamentos, exposição de rede, mudança de Hermes/políticas do Windows ou leitura de credenciais reais.
 
@@ -97,12 +97,18 @@ Resultado: 401 nós, 873 relações, 17 comunidades. Diagnóstico sem endpoints 
 - Datas conservam o calendário do provedor com providerDate; sem ajuste global de fuso. Virada de mês invalida no próximo render, sem timer/cron. Abrir lê cache local; consulta do provedor continua pelo botão.
 - Sem hosting, autenticação multiusuário, acesso remoto/celular, pagamentos, carteira Pluggy/B3 ou conciliação automática de saldo.
 
+## Preferência de uso recebida em 16/11/2026
+
+Sara informou que pretende usar computador e celular. A interface atual foi verificada em tela pequena, mas a API continua exclusivamente em loopback: não há acesso pelo celular implementado. Ainda é necessário definir se o acesso desejado é somente no mesmo Wi-Fi ou também fora de casa. Essa escolha determina HTTPS, autenticação/restrição de acesso e onde o serviço ficará executando. Nenhuma porta LAN, túnel, serviço remoto, hospedagem ou cobrança foi habilitada. O alcance e a solução de acesso permanecem pendentes das respostas, sem alterar a proteção atual.
+
+O fluxo bancário foi reconfirmado nas fontes oficiais em 16/11: a titular conecta seus bancos em meu.pluggy.ai e depois usa o conector MeuPluggy no Dashboard da mesma conta. Não se deve escolher o conector direto do banco no Dashboard para este caminho pessoal. Login, aprovação bancária e consentimentos são feitos privadamente pela titular.
+
 ## Configuração privada e próxima ação
 
 Foi criado **somente se ausente** um modelo vazio em C:/Users/sarai/AppData/Local/TrackerFinanceiro/config.env, fora do OneDrive. Nenhum segredo existente foi lido ou sobrescrito; nenhuma credencial real foi configurada. Registro private-config-preparation.json. Sara deve preencher privadamente Client ID/Client Secret e realizar os consentimentos no fluxo oficial; nunca enviá-los ao chat.
 
 Para executar: na pasta/branch corretas, npm.cmd run build e npm.cmd start; abrir http://127.0.0.1:3001. npm.cmd test executa a suíte; npm.cmd run dev usa frontend 127.0.0.1:5173 + API 3001. Ctrl+C encerra. A instalação usa npm.cmd ci com lockfile; os checks desta manutenção usaram --ignore-scripts/--no-audit e audit explícito separado.
 
-A etapa bancária real continua **blocked por dados/participação necessários**, não por nova solicitação de autorização: faltam bancos/cartões prioritários, situação dos consentimentos Meu Pluggy, preenchimento privado do modelo e definição PC versus necessidade remota. Pergunta objetiva já apresentada a Sara; silêncio não configura consentimento bancário nem credenciais. Nenhuma chamada ao banco será inventada. Após esses pré-requisitos, comparar amostras de sinais, moedas, datas, compras/faturas/pendências, duplicações, histórico e saldos, com retenção mínima e evidência anonimizada.
+A etapa bancária real continua **blocked por dados/participação necessários**, não por nova solicitação de autorização: faltam bancos/cartões prioritários, confirmação de qual portal Pluggy já possui conta, criação das conexões/consentimentos no Meu Pluggy, preenchimento privado do modelo e definição de acesso celular no mesmo Wi-Fi ou fora de casa. Pergunta objetiva já apresentada a Sara; silêncio não configura consentimento bancário nem credenciais. Nenhuma chamada ao banco será inventada. Após esses pré-requisitos, comparar amostras de sinais, moedas, datas, compras/faturas/pendências, duplicações, histórico e saldos, com retenção mínima e evidência anonimizada.
 
-Condições pessoais e fluxo continuam conforme as [fontes oficiais](https://docs.pluggy.ai/en/docs/guides/meu-pluggy-personal-use) e [guia Meu Pluggy](https://meu.pluggy.ai/api-guide) reconfirmados em 12/11/2026; cobertura/histórico da conta concreta ainda não verificados.
+Condições pessoais e fluxo continuam conforme as [fontes oficiais](https://docs.pluggy.ai/en/docs/guides/meu-pluggy-personal-use) e [guia Meu Pluggy](https://meu.pluggy.ai/api-guide) reconfirmados em 16/11/2026; cobertura/histórico da conta concreta ainda não verificados.
