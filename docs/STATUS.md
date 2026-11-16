@@ -1,12 +1,38 @@
 # Estado — Tracker Financeiro / Meu Pluggy
 
-Atualizado em 16/11/2026. Últimas verificações técnicas executadas em 12/11/2026; os resultados abaixo mantêm essa data. Estado canônico após a manutenção de segurança autorizada por Sara.
+Atualizado em 16/11/2026. Estado canônico do incremento PG-002; resultados de 12/11 continuam explicitamente históricos. Código atual em b02184c, após backend 4d3aabc e contrato 9d7076e.
+
+## PG-002 — PC e celular, aceite técnico em 16/11
+
+**Implementação verified; ativação real pendente.** Sara confirmou Meu Pluggy sem conexões, Inter/Mercado Pago primeiro, depois PicPay/Sofisa. Quer acesso de qualquer lugar, aceita PC ligado e escolheu rede privada sem hospedagem paga. Histórico, categorias, regras e carteira devem ser iguais nos dois aparelhos. Essas decisões estão resolvidas, não devem ser perguntadas novamente.
+
+- Ingresso opcional Tailscale Serve: backend segue 127.0.0.1, exige origem HTTPS exata e login proprietário em todas as rotas, sem fallback anônimo. Modo local rejeita cabeçalhos de proxy/Tailscale. Dev recusa configuração privada antes de iniciar filhos. Nenhum Serve/Funnel/porta LAN foi ativado.
+- Documento completo no SQLite v3 com validação comum frontend/backend, primeira cópia explícita e revisão CAS atômica. Migração v1/v2 preserva bancos; backup bancário segue formato v2 separado. Nenhum dado real do navegador foi copiado automaticamente.
+- Hooks existentes usam o estado central no modo privado. Cópia antiga local fica preservada, inclusive na leitura inicial falha. Reabertura/foco/botão fazem nova leitura; não há push instantâneo. Rascunho pendente é exportável e nunca reaplicado automaticamente. Erro de confirmação pode ocorrer após o PC já ter gravado.
+- Renomeação/palavras-chave mantêm texto intermediário local e salvam ao sair/Enter. Leitura de localStorage bloqueado não impede abrir estado central; falha de escrita aborta envio e permite exportar rascunho em memória. Recuperação tem foco e camada acima de modais sem perder texto ainda não enviado.
+
+| Verificação em 16/11 | Resultado | Evidência ignorada em .evidence/private-shared-2026-11-16/ |
+|---|---|---|
+| Linha de base | 117 testes, exit 0 | baseline-tests.log |
+| TDD servidor/cliente/UI/modal | RED demonstrado antes das respectivas correções | red-server.log, red-client.log, red-ui.log, red-modal.log |
+| Suíte final | **135 testes, zero falhas/skips**, exit 0 | tests-final.log |
+| Build final | TSC app/node + Vite, exit 0 | build-final.log |
+| Compartilhamento em Chrome | **34 checks**, zero exceções; dois contextos independentes e terceiro com storage bloqueado | runtime-shared.json, runtime-shared.log, shared-*.png |
+| Regressão local em Chrome | **25 checks**, zero exceções | local-runtime/runtime-browser.json, runtime-local.log |
+| Comandos reais | **6 checks**, start/dev/porta ocupada/config inválida/encerramento | commands/commands-result.json, commands-final.log |
+| Graphify | **464 nós/1024 relações/18 comunidades**, diagnose sem endpoints ausentes/colapso | graph-summary.json, implementation-map/graphify-out/ |
+| Preservação/limpeza | 6 hashes originais iguais; 0 Chrome QA remanescentes; portas próprias encerradas | preservation.json, cleanup-verified.json, runtime-*-cleanup.json |
+| Fronteira da validação | Adaptador bancário e ingresso confiável sintéticos; React compilado, HTTP e SQLite reais | runtime-shared.json, local-runtime/runtime-browser.json |
+
+Revisão independente encontrou e fechou: proxy sem configuração privada; gravação local antes de modo confirmado; texto intermediário inválido de categoria; leitura de storage negada; recuperação coberta por modal. Regressões unitárias e Chrome cobrem os casos. A revisão também fortaleceu o teste de headers para usar a porta real e um controle permitido. O mapa orienta navegação; não é prova de segurança/finanças.
+
+**Próxima etapa concreta:** instalador oficial Tailscale 1.104.7 baixado somente no temporário; assinatura Windows Valid/Tailscale Inc. e SHA-256 do fornecedor conferidos (installer-preflight.json). Ainda não executado. Confirmação específica solicitada conforme Computer Use; login e confirmações do Windows ficam com Sara. Ativar Serve somente depois de configurar origem/login privados e conferir serviços existentes, conforme [roteiro](private-access.md). Banco real aguarda conexões/consentimentos e credenciais preenchidas privadamente. Não houve publicação, push, cobrança ou leitura financeira real.
 
 ## Entregas e autoridade
 
 - Entrega técnica local: **verified**. Implementação, correções, dependências, suíte/build, runtime, preservação, Graphify e commits conferidos no escopo pessoal/loopback.
 - Cinco alertas anteriores de dependências: **verified — corrigidos**; audit atual com exit 0 e zero vulnerabilidades reportadas. Não é auditoria integral de segurança.
-- Validação bancária real: **blocked**. Em 16/11 Sara confirmou conta na Pluggy e ausência de conexões bancárias. Falta distinguir Meu Pluggy de Dashboard, definir bancos prioritários e concluir configuração/consentimentos privados. A autorização para prosseguir já foi recebida. Ainda não houve consulta financeira real nem comparação com bancos.
+- Validação bancária real: **blocked**. Meu Pluggy e bancos prioritários já confirmados; faltam conexões/consentimentos e configuração privada. A autorização para prosseguir já foi recebida. Ainda não houve consulta financeira real nem comparação com bancos.
 - Checkout C:/Users/sarai/OneDrive/Documentos/Tracker-Financeiro-pluggy; branch feat/meu-pluggy-sync; base e066b54. Checkout original Tracker-Financeiro preservado: seis hashes iguais aos da sessão e ao manifesto histórico.
 - Não houve push, PR, publicação, cobrança, pagamentos, exposição de rede, mudança de Hermes/políticas do Windows ou leitura de credenciais reais.
 
@@ -40,7 +66,7 @@ SheetJS: SHA-512 do tarball local inspecionado coincide com o lock; pacote sem s
 
 A primeira tentativa de npm audit desta manutenção foi bloqueada pela revisão automática por possível divulgação de nomes privados. Foram examinados o lock e o cliente npm: zero dependências privadas/workspaces, somente registry.npmjs.org e cdn.sheetjs.com, raiz omitida do bulk. A reavaliação foi aprovada; audit explícito com configuração npm vazia e registro público retornou exit 0/zero vulnerabilidades. Nenhum código, segredo ou dado financeiro foi enviado. Prova em audit-disclosure-proof.json; não houve desvio da rejeição ou auditoria oculta durante install/ci.
 
-## Verificações atuais e evidências
+## Verificações históricas de 12/11 e evidências
 
 Ambiente: Windows/PowerShell 5.1; Node 22.18.0, npm 10.9.3, Git 2.47.1.windows.1. npm.ps1 permanece bloqueado pela política existente; npm-cli.js foi usado e npm.cmd está disponível. Nenhuma política foi alterada.
 
@@ -81,7 +107,7 @@ F1–F5 continuam verified, incluindo caminhos reais de normalização → SQLit
 
 Revisão independente somente leitura da manutenção: sem achados bloqueadores ou ampliação incidental; peers/engines e SHA-512 conferidos. Os testes Excel cobrem datas/valores textuais brasileiros em .xls/.xlsx; não comprovam todos os formatos nativos/seriais do importador legado. Os checks finais foram executados pelo integrador. A [referência financas-br](https://github.com/Rafaelrr5/financas-br) permanece como inspiração de persistência/regras; não houve reescrita/copiar mecanismo de identidade de PDFs.
 
-## Graphify
+## Graphify histórico — 12/11
 
 Graphify 0.9.104: extração local code-only com ambiente sem credenciais; cluster-only --no-label e diagnose multigraph com exit 0. Sem cloud, backend semântico, instalação global ou --force. JSON, GRAPH_REPORT.md e graph.html atuais em .evidence/dependency-hardening-2026-11-12/implementation-map/graphify-out/.
 
@@ -90,16 +116,16 @@ Resultado: 401 nós, 873 relações, 17 comunidades. Diagnóstico sem endpoints 
 ## Limites atuais
 
 - Audit zero cobre advisories conhecidos do npm naquele momento; não comprova ausência de todos os defeitos. Não foi usado segredo real nos testes. Scanner de canários/formatos conhecidos tem escopo declarado e não lê configurações privadas.
-- Bundle principal ~680 kB, worker PDF ~1,26 MB e aviso experimental do SQLite permanecem. O npm ci também informa depreciação da linha Recharts 2; não há advisory reportado no audit atual. Não foi suprimido warning nem ampliada a manutenção para migração visual.
+- Bundle principal ~691 kB no build de 16/11, worker PDF ~1,26 MB e aviso experimental do SQLite permanecem. O npm ci também informa depreciação da linha Recharts 2; não há advisory reportado no audit atual. Não foi suprimido warning nem ampliada a manutenção para migração visual.
 - Importadores legados não foram inteiramente corrigidos. Não há restauração bancária/recuperação de desastre demonstrada só pela exportação JSON.
 - Identidade conservadora: providerId não ambíguo na mesma conta/item; nenhuma fusão por NSU/valor/data/texto ou entre reconexões. Mesmo ID é upsert, não log imutável de cada consulta. V1 não recupera identificadores perdidos retroativamente.
-- Histórico/carteira e SQLite são fontes/backups separados. Portas/origens possuem localStorage distinto, sem migração silenciosa. Resultado BRL liquidado não é saldo bancário; cartão não é dinheiro disponível.
+- No modo local, histórico/carteira continuam no navegador. No privado, seus cinco conjuntos ficam no documento SQLite central, separado da família bancária. Origens possuem localStorage distinto, sem migração silenciosa. Resultado BRL liquidado não é saldo bancário; cartão não é dinheiro disponível.
 - Datas conservam o calendário do provedor com providerDate; sem ajuste global de fuso. Virada de mês invalida no próximo render, sem timer/cron. Abrir lê cache local; consulta do provedor continua pelo botão.
-- Sem hosting, autenticação multiusuário, acesso remoto/celular, pagamentos, carteira Pluggy/B3 ou conciliação automática de saldo.
+- Sem hosting pago, autenticação multiusuário, pagamentos, carteira Pluggy/B3 ou conciliação automática de saldo. Acesso privado PC/celular implementado, ainda sem ativação real.
 
 ## Preferência de uso recebida em 16/11/2026
 
-Sara informou que pretende usar computador e celular. A interface atual foi verificada em tela pequena, mas a API continua exclusivamente em loopback: não há acesso pelo celular implementado. Ainda é necessário definir se o acesso desejado é somente no mesmo Wi-Fi ou também fora de casa. Essa escolha determina HTTPS, autenticação/restrição de acesso e onde o serviço ficará executando. Nenhuma porta LAN, túnel, serviço remoto, hospedagem ou cobrança foi habilitada. O alcance e a solução de acesso permanecem pendentes das respostas, sem alterar a proteção atual.
+Decisão confirmada: acesso de qualquer lugar, PC ligado, rede privada sem hospedagem paga e estado completo igual. Implementação e critérios em PG-002/ADR 003; ativação real pendente de instalação/login. Nenhuma porta LAN, publicação ou cobrança habilitada.
 
 O fluxo bancário foi reconfirmado nas fontes oficiais em 16/11: a titular conecta seus bancos em meu.pluggy.ai e depois usa o conector MeuPluggy no Dashboard da mesma conta. Não se deve escolher o conector direto do banco no Dashboard para este caminho pessoal. Login, aprovação bancária e consentimentos são feitos privadamente pela titular.
 
@@ -109,6 +135,6 @@ Foi criado **somente se ausente** um modelo vazio em C:/Users/sarai/AppData/Loca
 
 Para executar: na pasta/branch corretas, npm.cmd run build e npm.cmd start; abrir http://127.0.0.1:3001. npm.cmd test executa a suíte; npm.cmd run dev usa frontend 127.0.0.1:5173 + API 3001. Ctrl+C encerra. A instalação usa npm.cmd ci com lockfile; os checks desta manutenção usaram --ignore-scripts/--no-audit e audit explícito separado.
 
-A etapa bancária real continua **blocked por dados/participação necessários**, não por nova solicitação de autorização: faltam bancos/cartões prioritários, confirmação de qual portal Pluggy já possui conta, criação das conexões/consentimentos no Meu Pluggy, preenchimento privado do modelo e definição de acesso celular no mesmo Wi-Fi ou fora de casa. Pergunta objetiva já apresentada a Sara; silêncio não configura consentimento bancário nem credenciais. Nenhuma chamada ao banco será inventada. Após esses pré-requisitos, comparar amostras de sinais, moedas, datas, compras/faturas/pendências, duplicações, histórico e saldos, com retenção mínima e evidência anonimizada.
+A etapa bancária real continua **blocked por dados/participação necessários**, não por nova solicitação de autorização: faltam criação das conexões/consentimentos no Meu Pluggy e preenchimento privado da configuração. Portal, bancos e acesso remoto já foram confirmados. Silêncio não configura consentimento bancário nem credenciais. Nenhuma chamada ao banco será inventada. Após esses pré-requisitos, comparar amostras de sinais, moedas, datas, compras/faturas/pendências, duplicações, histórico e saldos, com retenção mínima e evidência anonimizada.
 
 Condições pessoais e fluxo continuam conforme as [fontes oficiais](https://docs.pluggy.ai/en/docs/guides/meu-pluggy-personal-use) e [guia Meu Pluggy](https://meu.pluggy.ai/api-guide) reconfirmados em 16/11/2026; cobertura/histórico da conta concreta ainda não verificados.
