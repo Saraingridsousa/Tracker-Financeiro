@@ -1,12 +1,22 @@
 # Estado — Tracker Financeiro / Meu Pluggy
 
-Atualizado em 16/11/2026. Estado canônico de PG-002 e da preservação de backups; resultados de 12/11 continuam explicitamente históricos. Código atual em b02184c, após backend 4d3aabc e contrato 9d7076e.
+Estado vigente: início do zero solicitado por Sara. A seção abaixo prevalece sobre a busca/restauração histórica, cancelada pela titular. As verificações anteriores permanecem documentadas em seus próprios marcos.
+
+## Início do zero — estado vigente
+
+Sara confirmou explicitamente que não quer usar dados antigos. Criado documento novo no SQLite por API local com CSRF/revisão esperada: **revisão 1, zero transações, regras personalizadas, ativos e ordens; 12 categorias padrão do código**. Nenhum backup antigo foi lido/restaurado para criar esse documento. Cópias antigas continuam arquivadas fora do Git. Não é necessário continuar procurando ou escolhendo o backup anterior para esse início.
+
+A interface passa a usar a base central também em loopback somente após inicialização explícita. API sinaliza sharedStateAvailable booleano; antes disso, mantém o modo legado. Hooks aguardam confirmar a origem antes de hidratar dados financeiros locais. O boot da base central não consulta as quatro chaves financeiras antigas, nem exibe seus dados transitoriamente. Conferir cópia local antiga exige clique explícito. Host/Origin/identidade/CSRF permanecem inalterados.
+
+Aceite atual em .evidence/fresh-start-2026-11-16/: RED2 para sinal/validação e RED em Chrome para leitura legada inicial; **139 testes, zero falhas/skips**, build exit0 e **10 checks no Chrome compilado**, incluindo zero leituras legadas no boot, nenhuma cópia de dados antigos, carteira vazia, armazenamento anterior intacto e viewport390 sem overflow. Revisão independente confirmou hidratação/persistência sem corrida. Graphify local/code-only/no-label: **469 nós, 1049 relações, 18 comunidades**, sem endpoints ausentes ou colapso.
+
+Aplicação real reiniciada somente pela árvore de processos própria previamente identificada. Verificados frontend atualizado, API central ativa e documento vazio preservado após reinício. Endereço local: http://localhost:5173. Uma aba anterior pode precisar de F5. Há **zero conexões bancárias** e credenciais Pluggy ainda não configuradas; acesso privado pelo celular continua pendente. A próxima etapa é autorizar/configurar Inter e Mercado Pago pelo fluxo pessoal, sem importar backups antigos.
 
 ## Etapa 1 — preservação e compatibilidade em 16/11
 
 Cópias locais existentes preservadas com SHA-256 idêntico, fora do Git/OneDrive; originais mantidos. Relatórios com contagens e referências ficam exclusivamente na pasta privada de backups. Nenhum backup financeiro real entra em fixtures, commits ou mapa de código.
 
-A usuária informou histórico vazio e dificuldade de localizar a opção de exportação. A seleção da fonte mais atual está pendente; não houve restauração no navegador nem gravação do documento financeiro compartilhado. A cópia existente não é presumida atual sem a conferência da titular.
+A usuária informou histórico vazio e dificuldade de localizar a exportação. Depois substituiu essa busca pela decisão de começar do zero. Não houve restauração desses backups; o documento novo é independente das cópias antigas.
 
 Corrigida incompatibilidade estrita de metadados conhecidos da carteira: assets.ticker opcional textual e investmentOrders.officialTotal opcional monetário não negativo. São preservados no roundtrip, sem substituir campos principais ou mudar cálculos. Tipos inválidos e outros campos desconhecidos continuam rejeitados. Revisão independente sem bloqueadores.
 

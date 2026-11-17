@@ -26,3 +26,9 @@ Fontes: https://tailscale.com/docs/features/tailscale-serve e https://tailscale.
 ## Compatibilidade da carteira legada — 16/11/2026
 
 A etapa de preservação encontrou backups antigos com assets.ticker (texto) e investmentOrders.officialTotal (valor finito, não negativo e dentro da precisão monetária aceita). São metadados opcionais conhecidos: conservar integralmente ao validar, exportar e persistir; não substituir tickerOrName/totalValue nem recalcular carteira a partir deles. Outros campos desconhecidos continuam recusados. Testar com fixtures sintéticas, sem incluir o backup financeiro real no Git. Não importar nem substituir dados automaticamente durante a preservação.
+
+## Início do zero e origem central no PC — 16/11/2026
+
+Sara substituiu a restauração de dados antigos pela criação explícita de uma base vazia, com categorias padrão. Nenhum backup antigo pode ser importado para esse início. Após inicialização explícita do documento, a API sinaliza sharedStateAvailable=true e o frontend usa a base central também em loopback. Antes disso, modo local legado permanece compatível. A troca não apaga nem copia o localStorage antigo. O sinal é booleano validado pelo cliente e não libera acesso privado; Host/Origin/identidade/CSRF seguem seu contrato.
+
+No primeiro render HTTP, a interface aguarda confirmar a origem antes de hidratar dados financeiros do navegador. Base central inicializada não lê nem exibe as quatro chaves financeiras legadas na abertura. Hidratação/persistência local só ocorrem após confirmação de modo legado, e a conferência de uma cópia local em modo compartilhado exige clique explícito.

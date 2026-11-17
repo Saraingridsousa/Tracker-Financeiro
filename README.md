@@ -83,10 +83,12 @@ Mês bancário usa o relógio local do PC; histórico usa a maior data válida d
 
 ## Verificação e limites conhecidos
 
-Validação da preservação em 16/11: 137 testes, zero falhas/skips, e TypeScript/Vite build aprovado. Chrome isolado: 35 verificações do fluxo compartilhado, incluindo metadados legados de carteira, com React compilado e HTTP/SQLite reais; transporte bancário e ingresso confiável sintéticos. Histórico de regressão local/Excel, comandos, Graphify e critérios detalhados em `docs/STATUS.md`. Isso não valida bancos reais.
+Validação do início do zero: 139 testes, zero falhas/skips, e TypeScript/Vite build aprovado. Chrome isolado: 10 verificações da troca para a base nova, sem ler nem restaurar dados financeiros antigos no boot e mantendo a cópia do navegador intacta. React compilado, HTTP e SQLite reais, com dados sintéticos somente no navegador de teste. Histórico de validações compartilhadas, carteira legada, Excel, comandos e Graphify em `docs/STATUS.md`. Isso não valida bancos reais.
 
 Os cinco alertas anteriores foram corrigidos: Vite 6.4.6/esbuild 0.25.12, postcss-selector-parser 6.1.6, source-map-js 1.2.2 e SheetJS 0.20.3. O `npm audit --json` atual retornou exit 0 e zero vulnerabilidades reportadas; isso não é auditoria integral do aplicativo. O `xlsx` usa a [distribuição oficial](https://docs.sheetjs.com/docs/getting-started/installation/nodejs/) com URL versionada e integridade fixada no lockfile. A instalação limpa foi verificada sem alterar o lockfile. Os controles Excel cobrem arquivos sintéticos `.xls`/`.xlsx` com datas e valores textuais brasileiros; não corrigem todos os formatos legados. O bundle principal acima de 500 kB, o aviso experimental do SQLite e a depreciação da linha Recharts 2 permanecem documentados.
 
 ## PC e celular com os mesmos dados
 
 O modo privado opcional usa Tailscale Serve e mantém o backend em loopback. Histórico, categorias, regras e carteira manual passam a usar um documento SQLite compartilhado, com primeira cópia explícita e proteção contra alterações concorrentes. A cópia antiga do navegador fica preservada. Veja [ativação e recuperação](docs/private-access.md), [contrato PG-002](docs/specs/private-shared.md) e [ADR 003](docs/decisions/003-private-shared-state.md). Acesso real depende da instalação/login no PC e celular, além dos consentimentos bancários; resultados sintéticos não substituem essas etapas.
+
+Depois de uma inicialização explícita, a base central também é usada no endereço local do PC. No início do zero, histórico/carteira/regras ficam vazios e somente categorias padrão são criadas; nenhum backup é importado automaticamente.

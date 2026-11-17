@@ -4,6 +4,8 @@ Implementação PG-002. O backend permanece em 127.0.0.1. A rede privada é opci
 
 ## Antes da primeira cópia
 
+Se a escolha foi começar do zero, use um documento novo explicitamente vazio com categorias padrão; não importe os backups antigos. Após inicialização, o PC também utiliza a base central no acesso local. As instruções de exportação abaixo se aplicam a quem deseja levar seu histórico existente.
+
 No endereço HTTP antigo do PC, exporte o backup completo em Configurações. Confira histórico, categorias, regras, ativos e ordens. Guarde esse JSON fora do Git/OneDrive compartilhado. O navegador não compartilha localStorage entre HTTP e a nova URL HTTPS: na primeira visita privada, importar esse backup costuma ser a opção correta.
 
 A tela de primeira cópia mostra as cinco contagens antes de confirmar. “Conferir” não grava. Cópia vazia é permitida apenas por confirmação explícita. O armazenamento antigo permanece preservado, mas alterações novas passam a ser gravadas no SQLite do PC. Carteira bancária/produtos Pluggy continuam separados da carteira manual.

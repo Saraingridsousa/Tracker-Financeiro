@@ -12,6 +12,7 @@ const civilDate = (value: unknown) => {
 function snapshot(body: unknown): BankingSnapshot {
   const invalid = () => { throw new Error('Resposta bancária inválida; os dados anteriores foram preservados.'); };
   if (!record(body) || typeof body.configured !== 'boolean' || !Array.isArray(body.connections) || !Array.isArray(body.accounts) || !Array.isArray(body.transactions)) return invalid();
+  if (body.sharedStateAvailable !== undefined && typeof body.sharedStateAvailable !== 'boolean') return invalid();
   if (body.accessMode !== undefined && !['local','private'].includes(body.accessMode as string)) return invalid();
   if (!body.connections.every(c => record(c) && text(c.id) && text(c.label) && text(c.status) && timestamp(c.lastFetchedAt) && timestamp(c.providerUpdatedAt) && timestamp(c.consentExpiresAt) && (c.lastError === null || typeof c.lastError === 'string'))) return invalid();
   const connectionIds = new Set(body.connections.map(c => c.id));

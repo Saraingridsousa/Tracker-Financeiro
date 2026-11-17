@@ -46,8 +46,10 @@ const persistOrders = (orders: InvestmentOrder[]) => {
 const parseCsvValue = (value: string) => value.trim();
 
 export const useInvestments = (shared?: SharedBacking, localWritable = true) => {
-  const [localAssets, setLocalAssets] = useState<AssetPosition[]>(readAssets());
-  const [localOrders, setLocalOrders] = useState<InvestmentOrder[]>(readOrders());
+  const canReadLocal = !shared && localWritable;
+  const [localAssets, setLocalAssets] = useState<AssetPosition[]>(() => canReadLocal ? readAssets() : []);
+  const [localOrders, setLocalOrders] = useState<InvestmentOrder[]>(() => canReadLocal ? readOrders() : []);
+  const [localHydrated, setLocalHydrated] = useState(canReadLocal);
 
   const assets = shared?.payload?.assets ?? localAssets;
   const orders = shared?.payload?.investmentOrders ?? localOrders;
@@ -55,12 +57,19 @@ export const useInvestments = (shared?: SharedBacking, localWritable = true) => 
   const setOrders: Dispatch<SetStateAction<InvestmentOrder[]>> = shared ? update => shared.set('investmentOrders', update) : setLocalOrders;
 
   useEffect(() => {
-    if (!shared && localWritable) persistAssets(assets);
-  }, [assets, Boolean(shared), localWritable]);
+    if (!canReadLocal || localHydrated) return;
+    setLocalAssets(readAssets());
+    setLocalOrders(readOrders());
+    setLocalHydrated(true);
+  }, [canReadLocal, localHydrated]);
 
   useEffect(() => {
-    if (!shared && localWritable) persistOrders(orders);
-  }, [orders, Boolean(shared), localWritable]);
+    if (canReadLocal && localHydrated) persistAssets(assets);
+  }, [assets, canReadLocal, localHydrated]);
+
+  useEffect(() => {
+    if (canReadLocal && localHydrated) persistOrders(orders);
+  }, [orders, canReadLocal, localHydrated]);
 
   const addAsset = (asset: Omit<AssetPosition, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     const normalized: AssetPosition = {
@@ -255,6 +264,7 @@ export const useInvestments = (shared?: SharedBacking, localWritable = true) => 
   return {
     assets,
     orders,
+    localReady: localHydrated,
     addAsset,
     updateAsset,
     deleteAsset,
@@ -265,6 +275,6 @@ export const useInvestments = (shared?: SharedBacking, localWritable = true) => 
     resetAllData,
     importBackup,
     exportBackup,
-    exportLocalBackup: (): InvestmentBackupPayload => ({ assets: localAssets, investmentOrders: localOrders, exportedAt: new Date().toISOString() }),
+    exportLocalBackup: (): InvestmentBackupPayload => ({ assets: readAssets(), investmentOrders: readOrders(), exportedAt: new Date().toISOString() }),
   };
 };

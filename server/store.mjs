@@ -42,6 +42,10 @@ export class Store {
     this.schemaVersion = 3;
   }
 
+  hasSharedState() {
+    return Boolean(this.db.prepare('SELECT 1 FROM shared_state WHERE id=1').get());
+  }
+
   sharedState() {
     const row = this.db.prepare('SELECT revision,data FROM shared_state WHERE id=1').get();
     return row ? { revision: row.revision, payload: JSON.parse(row.data) } : { revision: 0, payload: null };

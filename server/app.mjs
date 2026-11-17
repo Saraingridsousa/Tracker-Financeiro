@@ -7,7 +7,7 @@ import { HttpError, serveStatic } from './static.mjs';
 
 export function createAppServer({ store, pluggy, now = () => new Date(), privateAccess: suppliedAccess, distDir = fileURLToPath(new URL('../dist/', import.meta.url)) } = {}) {
   const privateAccess = suppliedAccess === undefined ? undefined : parsePrivateAccess(suppliedAccess.origin, suppliedAccess.user);
-  const snapshot = () => ({ ...store.snapshot(pluggy.configured), ...(privateAccess ? { accessMode: 'private' } : {}) });
+  const snapshot = () => ({ ...store.snapshot(pluggy.configured), ...(privateAccess ? { accessMode: 'private' } : {}), ...(store.hasSharedState() ? { sharedStateAvailable: true } : {}) });
   const csrfToken = randomBytes(32).toString('base64url');
   const syncing = new Set();
   const server = createServer((req, res) => { handle(req, res).catch(error => {

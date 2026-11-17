@@ -9,3 +9,5 @@ Histórico e carteira do navegador passam a ter cópia central explícita num do
 Banco de dados passa a versão 3; exportação bancária continua no formato 2, independente do documento legado e da versão interna SQLite. Migração não modifica registros financeiros anteriores.
 
 Consequências: PC deve estar ligado, sem suspensão, e ambos os aparelhos autenticados na rede privada. Não há push em tempo real. A cópia local antiga não é apagada, mas backups e importação têm de ser conferidos ao mudar de origem HTTP para HTTPS. Ativação requer a participação da proprietária no login Tailscale e nos bancos; não se pede credencial no chat.
+
+Evolução para início do zero: depois de inicialização explícita, o sinal booleano sharedStateAvailable faz o acesso local usar o mesmo documento central. Antes dessa confirmação, não há hidratação financeira local; se o modo legado for confirmado, hidrata antes de persistir. Isso não habilita rede privada nem importa dados do navegador.

@@ -91,10 +91,12 @@ const sortTransactionsByDateDesc = (items: Transaction[]) =>
   });
 
 export const useTransactions = (shared?: SharedBacking, localWritable = true) => {
-  const initialData = readStorage();
+  const canReadLocal = !shared && localWritable;
+  const [initialData] = useState(() => canReadLocal ? readStorage() : { transactions: [], categories: defaultCategories });
   const [localTransactions, setLocalTransactions] = useState<Transaction[]>(sortTransactionsByDateDesc(initialData.transactions));
   const [localCategories, setLocalCategories] = useState<Category[]>(initialData.categories);
-  const [localRules, setLocalRules] = useState<Rule[]>(readRules());
+  const [localRules, setLocalRules] = useState<Rule[]>(() => canReadLocal ? readRules() : []);
+  const [localHydrated, setLocalHydrated] = useState(canReadLocal);
 
   const transactions = shared?.payload?.transactions ?? localTransactions;
   const categories = shared?.payload?.categories ?? localCategories;
@@ -104,12 +106,21 @@ export const useTransactions = (shared?: SharedBacking, localWritable = true) =>
   const setRules: Dispatch<SetStateAction<Rule[]>> = shared ? update => shared.set('rules', update) : setLocalRules;
 
   useEffect(() => {
-    if (!shared && localWritable) persist(transactions, categories);
-  }, [transactions, categories, Boolean(shared), localWritable]);
+    if (!canReadLocal || localHydrated) return;
+    const next = readStorage();
+    setLocalTransactions(sortTransactionsByDateDesc(next.transactions));
+    setLocalCategories(next.categories);
+    setLocalRules(readRules());
+    setLocalHydrated(true);
+  }, [canReadLocal, localHydrated]);
 
   useEffect(() => {
-    if (!shared && localWritable) persistRules(rules);
-  }, [rules, Boolean(shared), localWritable]);
+    if (canReadLocal && localHydrated) persist(transactions, categories);
+  }, [transactions, categories, canReadLocal, localHydrated]);
+
+  useEffect(() => {
+    if (canReadLocal && localHydrated) persistRules(rules);
+  }, [rules, canReadLocal, localHydrated]);
 
   const addTransactions = (incoming: Transaction[]) => {
     setTransactions((prev) => {
@@ -237,6 +248,7 @@ export const useTransactions = (shared?: SharedBacking, localWritable = true) =>
     transactions,
     categories,
     rules,
+    localReady: localHydrated,
     addTransactions,
     addCategory,
     updateCategory,
@@ -252,6 +264,6 @@ export const useTransactions = (shared?: SharedBacking, localWritable = true) =>
     resetAllData,
     importBackup,
     exportBackup,
-    exportLocalBackup: (): BackupPayload => ({ transactions: localTransactions, categories: localCategories, rules: localRules, exportedAt: new Date().toISOString() }),
+    exportLocalBackup: (): BackupPayload => ({ ...readStorage(), rules: readRules(), exportedAt: new Date().toISOString() }),
   };
 };
