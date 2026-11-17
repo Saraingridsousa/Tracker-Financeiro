@@ -1,6 +1,16 @@
 # Estado — Tracker Financeiro / Meu Pluggy
 
-Atualizado em 16/11/2026. Estado canônico do incremento PG-002; resultados de 12/11 continuam explicitamente históricos. Código atual em b02184c, após backend 4d3aabc e contrato 9d7076e.
+Atualizado em 16/11/2026. Estado canônico de PG-002 e da preservação de backups; resultados de 12/11 continuam explicitamente históricos. Código atual em b02184c, após backend 4d3aabc e contrato 9d7076e.
+
+## Etapa 1 — preservação e compatibilidade em 16/11
+
+Cópias locais existentes preservadas com SHA-256 idêntico, fora do Git/OneDrive; originais mantidos. Relatórios com contagens e referências ficam exclusivamente na pasta privada de backups. Nenhum backup financeiro real entra em fixtures, commits ou mapa de código.
+
+A usuária informou histórico vazio e dificuldade de localizar a opção de exportação. A seleção da fonte mais atual está pendente; não houve restauração no navegador nem gravação do documento financeiro compartilhado. A cópia existente não é presumida atual sem a conferência da titular.
+
+Corrigida incompatibilidade estrita de metadados conhecidos da carteira: assets.ticker opcional textual e investmentOrders.officialTotal opcional monetário não negativo. São preservados no roundtrip, sem substituir campos principais ou mudar cálculos. Tipos inválidos e outros campos desconhecidos continuam rejeitados. Revisão independente sem bloqueadores.
+
+Verificações novas em .evidence/legacy-preservation-2026-11-16/: RED de dois testes antes da correção; suíte **137 testes/zero falhas e skips**, build exit 0 e **35 checks Chrome** com dados sintéticos, incluindo restauração compilada e reabertura SQLite preservando os metadados. Graphify local code-only/no-label: **466 nós, 1040 relações e 18 comunidades**, sem endpoints ausentes ou colapso. Evidências anteriores abaixo permanecem históricas para seu respectivo código.
 
 ## PG-002 — PC e celular, aceite técnico em 16/11
 
@@ -33,7 +43,7 @@ Revisão independente encontrou e fechou: proxy sem configuração privada; grav
 - Entrega técnica local: **verified**. Implementação, correções, dependências, suíte/build, runtime, preservação, Graphify e commits conferidos no escopo pessoal/loopback.
 - Cinco alertas anteriores de dependências: **verified — corrigidos**; audit atual com exit 0 e zero vulnerabilidades reportadas. Não é auditoria integral de segurança.
 - Validação bancária real: **blocked**. Meu Pluggy e bancos prioritários já confirmados; faltam conexões/consentimentos e configuração privada. A autorização para prosseguir já foi recebida. Ainda não houve consulta financeira real nem comparação com bancos.
-- Checkout C:/Users/sarai/OneDrive/Documentos/Tracker-Financeiro-pluggy; branch feat/meu-pluggy-sync; base e066b54. Checkout original Tracker-Financeiro preservado: seis hashes iguais aos da sessão e ao manifesto histórico.
+- Checkout C:/Users/sarai/OneDrive/Documentos/Tracker-Financeiro-pluggy; branch feat/meu-pluggy-sync; base e066b54. A preservação anterior dos seis arquivos foi verificada no seu marco histórico. Na etapa de backups, o checkout original já foi observado limpo na main; não foi alterado ou restaurado pelo fix atual.
 - Sara autorizou commit e push do código em 16/11. Entrega na branch feat/meu-pluggy-sync do origin; sem merge na main ou publicação do aplicativo. Tailscale instalado/autenticado; Serve privado ainda não ativado. Nenhuma cobrança, pagamento ou alteração de políticas do Windows.
 
 ## Commits locais

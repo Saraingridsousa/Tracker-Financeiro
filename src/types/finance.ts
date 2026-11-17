@@ -62,6 +62,8 @@ export interface Rule {
 
 export interface AssetPosition {
   id: string;
+  /** Metadado legado preservado; tickerOrName continua sendo o nome exibido. */
+  ticker?: string;
   tickerOrName: string;
   type: AssetType;
   quantity: number;
@@ -82,6 +84,8 @@ export interface InvestmentOrder {
   quantity: number;
   unitPrice: number;
   totalValue: number;
+  /** Metadado legado preservado sem substituir totalValue nos cálculos. */
+  officialTotal?: number;
 }
 
 export interface InvestmentBackupPayload {

@@ -44,11 +44,11 @@ const categories = value => validRecords(value, {
 const rules = value => validRecords(value, { id: isText, categoryId: isText, keywords: isKeywords, isActive: isBoolean });
 const assets = value => validRecords(value, {
     id: isText, tickerOrName: isText, type: isAssetType, quantity: isNonNegative, avgPrice: isNonNegative, currentPrice: isNonNegative,
-}, { targetAllocationPercent: value => isNonNegative(value) && value <= 100, createdAt: isTemporal, updatedAt: isTemporal });
+}, { ticker: isString, targetAllocationPercent: value => isNonNegative(value) && value <= 100, createdAt: isTemporal, updatedAt: isTemporal });
 const investmentOrders = value => validRecords(value, {
     id: isText, assetId: isText, ticker: isText, type: isAssetType, operation: oneOf('BUY', 'SELL'),
     date: isDate, quantity: isNonNegative, unitPrice: isNonNegative, totalValue: isNonNegative,
-});
+}, { officialTotal: isNonNegative });
 export function parseLegacyBackup(text) {
     let payload;
     try {

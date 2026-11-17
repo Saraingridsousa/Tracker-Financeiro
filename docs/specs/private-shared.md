@@ -22,3 +22,7 @@ Autorização de Sara em 16/11/2026: conta Meu Pluggy, Inter e Mercado Pago prim
 | PS-05 | Suíte, build e runtime PC/celular sintéticos; original preservado; revisão independente |
 
 Fontes: https://tailscale.com/docs/features/tailscale-serve e https://tailscale.com/docs/reference/tailscale-cli/serve (consultadas em 16/11/2026). Serve autentica a rede e remove cabeçalhos de identidade enviados pelo cliente. Cabeçalho isolado não autentica: somente proxy confiável em loopback integra esse limite de confiança. Processos locais já têm acesso ao SQLite. Uso exige máquinas pessoais sem usuários locais não confiáveis.
+
+## Compatibilidade da carteira legada — 16/11/2026
+
+A etapa de preservação encontrou backups antigos com assets.ticker (texto) e investmentOrders.officialTotal (valor finito, não negativo e dentro da precisão monetária aceita). São metadados opcionais conhecidos: conservar integralmente ao validar, exportar e persistir; não substituir tickerOrName/totalValue nem recalcular carteira a partir deles. Outros campos desconhecidos continuam recusados. Testar com fixtures sintéticas, sem incluir o backup financeiro real no Git. Não importar nem substituir dados automaticamente durante a preservação.

@@ -83,7 +83,7 @@ Mês bancário usa o relógio local do PC; histórico usa a maior data válida d
 
 ## Verificação e limites conhecidos
 
-Suíte oficial: 117 testes, zero falhas/skips; TypeScript/Vite build passou. Chrome isolado: 25 verificações (incluindo importação Excel pelo build) com HTTP/SQLite reais e transporte Pluggy sintético. Comandos de execução: seis checks. Graphify local atualizado; detalhes, matriz PG-A01–PG-A10 e evidências em `docs/STATUS.md`. Isso não valida bancos reais.
+Validação da preservação em 16/11: 137 testes, zero falhas/skips, e TypeScript/Vite build aprovado. Chrome isolado: 35 verificações do fluxo compartilhado, incluindo metadados legados de carteira, com React compilado e HTTP/SQLite reais; transporte bancário e ingresso confiável sintéticos. Histórico de regressão local/Excel, comandos, Graphify e critérios detalhados em `docs/STATUS.md`. Isso não valida bancos reais.
 
 Os cinco alertas anteriores foram corrigidos: Vite 6.4.6/esbuild 0.25.12, postcss-selector-parser 6.1.6, source-map-js 1.2.2 e SheetJS 0.20.3. O `npm audit --json` atual retornou exit 0 e zero vulnerabilidades reportadas; isso não é auditoria integral do aplicativo. O `xlsx` usa a [distribuição oficial](https://docs.sheetjs.com/docs/getting-started/installation/nodejs/) com URL versionada e integridade fixada no lockfile. A instalação limpa foi verificada sem alterar o lockfile. Os controles Excel cobrem arquivos sintéticos `.xls`/`.xlsx` com datas e valores textuais brasileiros; não corrigem todos os formatos legados. O bundle principal acima de 500 kB, o aviso experimental do SQLite e a depreciação da linha Recharts 2 permanecem documentados.
 
