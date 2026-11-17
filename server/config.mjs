@@ -1,3 +1,4 @@
+import { readConnectionsFile } from './connections.mjs';
 import { parsePrivateAccess } from './access.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -20,7 +21,10 @@ export function loadConfig({ env = process.env, cwd = process.cwd() } = {}) {
   }
   const portText = env.TRACKER_PORT ?? '3001';
   if (!/^\d+$/.test(portText) || Number(portText) < 1 || Number(portText) > 65535) throw new Error('Porta TRACKER_PORT inválida.');
-  return { privateAccess: parsePrivateAccess(env.TRACKER_PRIVATE_ORIGIN, env.TRACKER_PRIVATE_USER), port: Number(portText), dataDir: env.TRACKER_DATA_DIR ? resolve(cwd, env.TRACKER_DATA_DIR) : resolve(env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'TrackerFinanceiro'),
+  const dataDir = env.TRACKER_DATA_DIR ? resolve(cwd, env.TRACKER_DATA_DIR) : resolve(env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'TrackerFinanceiro');
+  const connectionsFile = env.TRACKER_CONNECTIONS_FILE ? resolve(cwd, env.TRACKER_CONNECTIONS_FILE) : join(dataDir, 'connections.json');
+  const connections = readConnectionsFile(connectionsFile, { optional: !env.TRACKER_CONNECTIONS_FILE });
+  return { connectionsFile, connections, privateAccess: parsePrivateAccess(env.TRACKER_PRIVATE_ORIGIN, env.TRACKER_PRIVATE_USER), port: Number(portText), dataDir,
     clientId: env.PLUGGY_CLIENT_ID ?? local.PLUGGY_CLIENT_ID,
     clientSecret: env.PLUGGY_CLIENT_SECRET ?? local.PLUGGY_CLIENT_SECRET,
   };

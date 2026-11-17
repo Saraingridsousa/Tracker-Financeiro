@@ -29,7 +29,7 @@ test('readItem authenticates server-side and reads account pages plus transactio
   assert.equal(result.accounts.length, 2);
   assert.equal(result.transactions.length, 4);
   assert.equal(result.providerUpdatedAt, '2026-10-31T00:00:00Z');
-  assert.equal(result.transactions[0].bankName, 'Sintético');
+  assert.equal(result.transactions[0].bankName, 'Conta sintética');
   await client.readItem(ITEM);
   assert.equal(calls.filter(c => c.u.pathname === '/auth').length, 1);
   assert.equal(calls.filter(c => c.u.pathname === '/v2/items' || c.u.pathname === '/transactions').length, 0);

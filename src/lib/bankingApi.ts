@@ -9,6 +9,15 @@ const civilDate = (value: unknown) => {
   const date = new Date(value + 'T00:00:00Z');
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 };
+const nullableText = (v:unknown) => v === null || text(v);
+const optionalTime = (v:unknown) => v === undefined || timestamp(v);
+const nullableCents = (v:unknown) => v === null || Number.isSafeInteger(v);
+const optionalFlag = (v:unknown) => v === undefined || typeof v === 'boolean';
+function productState(v:unknown):boolean {
+  return record(v) && ['available','empty','unavailable','error'].includes(v.state as string)
+    && (v.returned===undefined||(Number.isSafeInteger(v.returned)&&(v.returned as number)>=0))
+    && (v.message===undefined||typeof v.message==='string');
+}
 function snapshot(body: unknown): BankingSnapshot {
   const invalid = () => { throw new Error('Resposta bancária inválida; os dados anteriores foram preservados.'); };
   if (!record(body) || typeof body.configured !== 'boolean' || !Array.isArray(body.connections) || !Array.isArray(body.accounts) || !Array.isArray(body.transactions)) return invalid();
@@ -18,8 +27,37 @@ function snapshot(body: unknown): BankingSnapshot {
   const connectionIds = new Set(body.connections.map(c => c.id));
   if (!body.accounts.every(a => record(a) && text(a.id) && connectionIds.has(a.itemId) && text(a.name) && ['BANK','CREDIT'].includes(a.type as string) && currency(a.currencyCode) && Number.isSafeInteger(a.balanceCents))) return invalid();
   const accountIds = new Set(body.accounts.map(a => a.id));
+  const accountOwners = new Map(body.accounts.map(a => [a.id,a.itemId]));
+  for(const c of body.connections) {
+    if(![c.lastSuccessfulSyncAt,c.lastAttemptAt,c.lastFullSyncAt].every(optionalTime) || (c.syncMode!==undefined&&!['full','incremental'].includes(c.syncMode as string)) || (c.executionStatus!==undefined&&!nullableText(c.executionStatus)))return invalid();
+    if(c.identification!==undefined) {
+      const i=c.identification;
+      if(!record(i)||!['confirmed','mismatch','partial','unverified'].includes(i.state as string)||(i.institutions!==undefined&&(!Array.isArray(i.institutions)||!i.institutions.every(text)))||(i.codes!==undefined&&(!Array.isArray(i.codes)||!i.codes.every(v=>typeof v==='string'&&/^\d{3}$/.test(v)))))return invalid();
+    }
+    if(c.productStates!==undefined) {
+      if(!record(c.productStates))return invalid();
+      for(const key of ['bills','investments']) {
+        const state=c.productStates[key];if(state===undefined)continue;
+        if(!productState(state))return invalid();
+        if(record(state)&&state.accounts!==undefined&&(!Array.isArray(state.accounts)||!state.accounts.every(a=>record(a)&&accountOwners.get(a.accountId)===c.id&&productState(a))))return invalid();
+      }
+    }
+  }
+  for(const a of body.accounts) {
+    const i=a.institution;
+    if(i!==undefined&&(!record(i)||!nullableText(i.name)||!(i.code===null||(typeof i.code==='string'&&/^\d{3}$/.test(i.code)))||!nullableText(i.family)||!['bankData.transferNumber','account.name','unavailable'].includes(i.source as string)||!['identified','reported','unverified'].includes(i.state as string)))return invalid();
+    const credit=a.creditData;
+    if(credit!==undefined&&(!record(credit)||!nullableCents(credit.creditLimitCents)||!nullableCents(credit.availableCreditLimitCents)||!(credit.dueDate===null||civilDate(credit.dueDate))))return invalid();
+  }
   if (!body.transactions.every(t => record(t) && text(t.id) && text(t.providerTransactionId) && accountIds.has(t.accountId) && civilDate(t.date) && typeof t.description === 'string' && Number.isSafeInteger(t.amountCents) && (t.amountCents as number) >= 0 && t.amount === (t.amountCents as number) / 100 && ['income','expense'].includes(t.type as string) && t.source === 'pluggy' && ['POSTED','PENDING'].includes(t.providerStatus as string) && currency(t.currencyCode) && typeof t.manualCategory === 'boolean' && (t.categoryId === null || text(t.categoryId)))) return invalid();
   for (const rows of [body.connections, body.accounts, body.transactions]) if (new Set(rows.map(r => r.id)).size !== rows.length) return invalid();
+  if (body.products !== undefined) {
+    if(!record(body.products)||!Array.isArray(body.products.bills)||!Array.isArray(body.products.investments))return invalid();
+    if(!body.products.bills.every(b=>record(b)&&text(b.id)&&connectionIds.has(b.itemId)&&accountOwners.get(b.accountId)===b.itemId&&civilDate(b.dueDate)&&currency(b.currencyCode)&&Number.isSafeInteger(b.totalAmountCents)&&(b.minimumPaymentCents===null||Number.isSafeInteger(b.minimumPaymentCents))&&(b.closingDate===null||civilDate(b.closingDate))&&optionalTime(b.observedAt)))return invalid();
+    if(!body.products.investments.every(i=>record(i)&&text(i.id)&&connectionIds.has(i.itemId)&&text(i.name)&&text(i.type)&&currency(i.currencyCode)&&Number.isSafeInteger(i.balanceCents)&&(i.referenceDate===null||civilDate(i.referenceDate))&&text(i.status)&&(i.dueDate===null||civilDate(i.dueDate))&&[i.grossAmountCents,i.originalAmountCents,i.profitCents].every(nullableCents)&&(i.quantity===null||(typeof i.quantity==='number'&&Number.isFinite(i.quantity)))&&optionalTime(i.observedAt)))return invalid();
+    for(const rows of [body.products.bills,body.products.investments])if(new Set(rows.map(r=>r.id)).size!==rows.length)return invalid();
+  }
+  if(!body.transactions.every(t=>(t.notes===undefined||(typeof t.notes==='string'&&t.notes.length<=2000))&&optionalFlag(t.isSelfTransfer)&&optionalFlag(t.manualSelfTransfer)))return invalid();
   return body as unknown as BankingSnapshot;
 }
 

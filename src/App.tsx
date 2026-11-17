@@ -329,7 +329,7 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
     else updateLegacyCategory(id, categoryId);
   };
   const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    if (dataSource === 'banking') void banking.updateTransaction(id, { description: updates.description });
+    if (dataSource === 'banking') void banking.updateTransaction(id, { description: updates.description, notes:updates.notes, isSelfTransfer:updates.isSelfTransfer });
     else updateLegacyTransaction(id, updates);
   };
   const deleteTransaction = (id: string) => {

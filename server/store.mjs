@@ -7,7 +7,7 @@ export class Store {
     this.db = new DatabaseSync(filename);
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (version > 3) { this.db.close(); throw new Error('Versão do banco não suportada.'); }
+    if (version > 4) { this.db.close(); throw new Error('Versão do banco não suportada.'); }
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.exec(`CREATE TABLE IF NOT EXISTS connections (
@@ -37,9 +37,14 @@ export class Store {
         PRAGMA user_version = 2;
       `);
       if (version < 3) this.db.exec('CREATE TABLE shared_state (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL CHECK(revision>0), data TEXT NOT NULL); PRAGMA user_version=3;');
+      if (version < 4) this.db.exec(`
+        CREATE TABLE bank_products(kind TEXT NOT NULL CHECK(kind IN ('bills','investments')),id TEXT NOT NULL,item_id TEXT NOT NULL REFERENCES connections(id),account_id TEXT REFERENCES accounts(id),data TEXT NOT NULL,PRIMARY KEY(kind,id));
+        CREATE TABLE connection_sync(item_id TEXT PRIMARY KEY REFERENCES connections(id),data TEXT NOT NULL);
+        CREATE TABLE transaction_annotations(transaction_id TEXT PRIMARY KEY REFERENCES transactions(id),notes TEXT,is_self_transfer INTEGER CHECK(is_self_transfer IN (0,1)));
+        PRAGMA user_version=4;`);
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); this.db.close(); throw error; }
-    this.schemaVersion = 3;
+    this.schemaVersion = 4;
   }
 
   hasSharedState() {
@@ -64,6 +69,12 @@ export class Store {
     } catch(error) { this.db.exec('ROLLBACK');throw error; }
   }
 
+  configureConnections(rows) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try { for(const row of rows) { if(typeof row.label!=='string'||!row.label.trim()||row.label.length>120)throw new Error('Nome de conexão inválido.'); const existing=this.connections().find(c=>c.id.toLowerCase()===row.itemId.toLowerCase());if(existing)this.db.prepare('UPDATE connections SET label=? WHERE id=?').run(row.label,existing.id);else this.registerConnection(row); }this.db.exec('COMMIT'); }
+    catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+
   registerConnection({ itemId, label }) {
     if (typeof itemId !== 'string' || !/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(itemId)) throw new Error('itemId deve ser um UUID válido.');
     if (typeof label !== 'string' || !label.trim() || label.length > 120) throw new Error('Informe um nome de até 120 caracteres.');
@@ -76,7 +87,7 @@ export class Store {
   connections() {
     return this.db.prepare(`SELECT id,label,status,last_fetched_at AS lastFetchedAt,
       provider_updated_at AS providerUpdatedAt,consent_expires_at AS consentExpiresAt,
-      last_error AS lastError FROM connections ORDER BY rowid`).all().map(r => ({ ...r }));
+      last_error AS lastError FROM connections ORDER BY rowid`).all().map(r => ({ ...r, ...JSON.parse(this.db.prepare('SELECT data FROM connection_sync WHERE item_id=?').get(r.id)?.data || '{}') }));
   }
 
   applySync(itemId, batch, fetchedAt) {
@@ -132,11 +143,25 @@ export class Store {
         this.db.prepare(`INSERT INTO transactions(id,account_id,amount_cents,data,identity_id) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
           amount_cents=excluded.amount_cents,data=excluded.data`).run(transaction.id, transaction.accountId, amountCents, JSON.stringify(data), replaces?.identityId || transaction.id);
         if (replaces) {
+          this.db.prepare('INSERT INTO transaction_annotations(transaction_id,notes,is_self_transfer) SELECT ?,notes,is_self_transfer FROM transaction_annotations WHERE transaction_id=?').run(transaction.id,replaces.id);
           this.db.prepare('UPDATE transactions SET superseded_by=? WHERE id=?').run(transaction.id, replaces.id);
           this.db.prepare('INSERT INTO transaction_reconciliations(from_id,to_id,provider_id,reconciled_at) VALUES (?,?,?,?)').run(replaces.id, transaction.id, transaction.providerId, fetchedAt);
           this.db.prepare(`INSERT INTO overrides(transaction_id,category_id,manual_category,description,hidden)
             SELECT ?,category_id,manual_category,description,hidden FROM overrides WHERE transaction_id=?`).run(transaction.id, replaces.id);
         }
+      }
+      if (batch.productStates || batch.identification) {
+        for(const kind of ['bills','investments']) {
+          const seen=new Map();for(const row of batch[kind]??[]) {
+            if(row.itemId!==itemId || (row.accountId && this.db.prepare('SELECT item_id FROM accounts WHERE id=?').get(row.accountId)?.item_id!==itemId))throw new Error('Produto pertence a outro item.');
+            if(seen.has(row.id)&&!isDeepStrictEqual(seen.get(row.id),row))throw new Error('Produto duplicado divergente.');seen.set(row.id,row);
+            const owner=this.db.prepare('SELECT item_id FROM bank_products WHERE kind=? AND id=?').get(kind,row.id)?.item_id;if(owner&&owner!==itemId)throw new Error('Identidade de produto conflitante.');
+            this.db.prepare('INSERT INTO bank_products(kind,id,item_id,account_id,data) VALUES(?,?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data').run(kind,row.id,itemId,row.accountId??null,JSON.stringify({...row,observedAt:fetchedAt}));
+          }
+        }
+        const previous=JSON.parse(this.db.prepare('SELECT data FROM connection_sync WHERE item_id=?').get(itemId)?.data||'{}');
+        const metadata={...previous,lastAttemptAt:fetchedAt,lastSuccessfulSyncAt:fetchedAt,lastFullSyncAt:batch.syncMode==='full'?fetchedAt:previous.lastFullSyncAt??null,syncMode:batch.syncMode??'full',executionStatus:batch.executionStatus??null,identification:batch.identification??previous.identification??{state:'unverified'},productStates:batch.productStates??previous.productStates??{}};
+        this.db.prepare('INSERT INTO connection_sync VALUES(?,?) ON CONFLICT(item_id) DO UPDATE SET data=excluded.data').run(itemId,JSON.stringify(metadata));
       }
       this.db.prepare(`UPDATE connections SET status=?,last_fetched_at=?,provider_updated_at=?,
         consent_expires_at=?,last_error=NULL WHERE id=?`).run(batch.status, fetchedAt, batch.providerUpdatedAt ?? null, batch.consentExpiresAt ?? null, itemId);
@@ -145,18 +170,23 @@ export class Store {
   }
 
   recordSyncError(itemId, message) {
+    const previous=JSON.parse(this.db.prepare('SELECT data FROM connection_sync WHERE item_id=?').get(itemId)?.data||'{}');
+    this.db.prepare('INSERT INTO connection_sync VALUES(?,?) ON CONFLICT(item_id) DO UPDATE SET data=excluded.data').run(itemId,JSON.stringify({...previous,lastAttemptAt:new Date().toISOString()}));
     this.db.prepare("UPDATE connections SET status='ERROR',last_error=? WHERE id=?").run(message, itemId);
   }
 
   snapshot(configured) {
     const accounts = this.db.prepare('SELECT * FROM accounts ORDER BY id').all().map(r => ({ ...JSON.parse(r.data), balanceCents: r.balance_cents }));
-    const transactions = this.db.prepare(`SELECT t.*,o.category_id,o.manual_category,o.description AS manual_description
-      FROM transactions t LEFT JOIN overrides o ON t.id=o.transaction_id WHERE t.superseded_by IS NULL AND COALESCE(o.hidden,0)=0 ORDER BY t.id`).all().map(r => ({
+    const transactions = this.db.prepare(`SELECT t.*,o.category_id,o.manual_category,o.description AS manual_description,n.notes,n.is_self_transfer
+      FROM transactions t LEFT JOIN overrides o ON t.id=o.transaction_id LEFT JOIN transaction_annotations n ON n.transaction_id=t.id WHERE t.superseded_by IS NULL AND COALESCE(o.hidden,0)=0 ORDER BY t.id`).all().map(r => ({
       ...JSON.parse(r.data), identityId: r.identity_id, amountCents: r.amount_cents, amount: r.amount_cents / 100,
       ...(r.manual_category ? { categoryId: r.category_id, manualCategory: true } : {}),
       ...(r.manual_description !== null ? { description: r.manual_description } : {}),
+      ...(r.notes !== null ? {notes:r.notes}:{}),
+      ...(r.is_self_transfer !== null ? {isSelfTransfer:Boolean(r.is_self_transfer),manualSelfTransfer:true}:{}),
     }));
-    return { configured: Boolean(configured), connections: this.connections(), accounts, transactions };
+    const rows=this.db.prepare('SELECT kind,data FROM bank_products ORDER BY kind,id').all();
+    return { configured: Boolean(configured), connections: this.connections(), accounts, transactions, ...(rows.length?{products:{bills:rows.filter(r=>r.kind==='bills').map(r=>JSON.parse(r.data)),investments:rows.filter(r=>r.kind==='investments').map(r=>JSON.parse(r.data))}}:{}) };
   }
 
   requireTransaction(id) {
@@ -173,9 +203,14 @@ export class Store {
 
   patchTransaction(id, patch) {
     id = this.requireTransaction(id);
-    if (!patch || !Object.keys(patch).length || Object.keys(patch).some(k => !['categoryId','description'].includes(k))) throw new Error('Campos de edição inválidos.');
+    if (!patch || !Object.keys(patch).length || Object.keys(patch).some(k => !['categoryId','description','notes','isSelfTransfer'].includes(k))) throw new Error('Campos de edição inválidos.');
     if ('description' in patch && (typeof patch.description !== 'string' || !patch.description.trim() || patch.description.length > 1000)) throw new Error('Descrição inválida.');
     if ('categoryId' in patch && patch.categoryId !== null && (typeof patch.categoryId !== 'string' || !patch.categoryId.trim() || patch.categoryId.length > 120)) throw new Error('Categoria inválida.');
+    if ('notes' in patch && (typeof patch.notes!=='string'||patch.notes.length>2000)) throw new Error('Anotação inválida.');
+    if ('isSelfTransfer' in patch && typeof patch.isSelfTransfer!=='boolean') throw new Error('Marca de transferência inválida.');
+    this.db.prepare('INSERT OR IGNORE INTO transaction_annotations(transaction_id) VALUES (?)').run(id);
+    if('notes' in patch)this.db.prepare('UPDATE transaction_annotations SET notes=? WHERE transaction_id=?').run(patch.notes,id);
+    if('isSelfTransfer' in patch)this.db.prepare('UPDATE transaction_annotations SET is_self_transfer=? WHERE transaction_id=?').run(Number(patch.isSelfTransfer),id);
     this.db.prepare('INSERT OR IGNORE INTO overrides(transaction_id) VALUES (?)').run(id);
     if ('description' in patch) this.db.prepare('UPDATE overrides SET description=? WHERE transaction_id=?').run(patch.description, id);
     if ('categoryId' in patch) this.db.prepare('UPDATE overrides SET category_id=?,manual_category=1 WHERE transaction_id=?').run(patch.categoryId, id);
@@ -187,7 +222,7 @@ export class Store {
   }
 
   backup() {
-    return { schemaVersion: 2, exportedAt: new Date().toISOString(), connections: this.connections(),
+    return { schemaVersion: 3, products:this.snapshot(false).products??{bills:[],investments:[]}, annotations:this.db.prepare('SELECT transaction_id AS transactionId,notes,is_self_transfer AS isSelfTransfer FROM transaction_annotations ORDER BY transaction_id').all().map(r=>({...r})), exportedAt: new Date().toISOString(), connections: this.connections(),
       accounts: this.snapshot(false).accounts,
       transactions: this.db.prepare('SELECT * FROM transactions ORDER BY id').all().map(r => ({ ...JSON.parse(r.data), identityId: r.identity_id, supersededBy: r.superseded_by, amountCents: r.amount_cents })),
       reconciliations: this.db.prepare('SELECT * FROM transaction_reconciliations ORDER BY id').all().map(r => ({

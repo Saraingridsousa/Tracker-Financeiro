@@ -24,10 +24,20 @@ export function useBanking() {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   async function mutate(method: 'POST' | 'PATCH' | 'DELETE', path: string, body: unknown = {}) {
-    ++generation.current; // A snapshot started before this write cannot supersede it.
+    const mutationGeneration = ++generation.current; // A snapshot started before this write cannot supersede it.
     setBusy(true); setError('');
     try { await api.mutate(method, path, body); return await refresh(); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Operação não concluída.'); return false; }
+    catch (err) {
+      // A failed provider read still records local attempt/error metadata.
+      if (mutationGeneration === generation.current) {
+        try {
+          const next = await api.load();
+          if (mutationGeneration === generation.current) { setSnapshot(next); setLoaded(true); }
+        } catch { /* Keep the visible cache if the local backend is unavailable. */ }
+        if (mutationGeneration === generation.current) setError(err instanceof Error ? err.message : 'Operação não concluída.');
+      }
+      return false;
+    }
     finally { setBusy(false); }
   }
   async function downloadBackup() {
@@ -43,8 +53,8 @@ export function useBanking() {
   }
   return { snapshot, loaded, busy, error, refresh, downloadBackup,
     addConnection: (itemId: string, label: string) => mutate('POST', '/api/connections', { itemId, label }),
-    sync: (id: string) => mutate('POST', `/api/connections/${encodeURIComponent(id)}/sync`),
-    updateTransaction: (id: string, updates: { categoryId?: string; description?: string }) => mutate('PATCH', `/api/transactions/${encodeURIComponent(id)}`, updates),
+    sync: (id: string, full = false) => mutate('POST', `/api/connections/${encodeURIComponent(id)}/sync`, full ? {full:true} : {}),
+    updateTransaction: (id: string, updates: { categoryId?: string; description?: string; notes?:string; isSelfTransfer?:boolean }) => mutate('PATCH', `/api/transactions/${encodeURIComponent(id)}`, updates),
     hideTransaction: (id: string) => mutate('DELETE', `/api/transactions/${encodeURIComponent(id)}`),
   };
 }

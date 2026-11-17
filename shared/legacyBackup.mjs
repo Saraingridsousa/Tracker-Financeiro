@@ -32,8 +32,8 @@ const transactions = value => validRecords(value, {
     id: isText, date: isDate, description: isString, amount: isAmount,
     type: oneOf('income', 'expense'), categoryId: isText, source: oneOf('manual', 'import'), createdAt: isTemporal,
 }, {
-    categoryName: isString, category: isString, updatedAt: isTemporal,
-    isInternalTransfer: isBoolean, isSelfTransfer: isBoolean, isInvestment: isBoolean,
+    notes: value => isString(value) && value.length <= 2000, categoryName: isString, category: isString, updatedAt: isTemporal,
+    isInternalTransfer: isBoolean, isSelfTransfer: isBoolean, manualSelfTransfer: isBoolean, isInvestment: isBoolean,
     isCreditCardPayment: isBoolean, isNeutral: isBoolean,
     paymentMethod: oneOf('CREDIT_CARD', 'DEBIT_CARD', 'BANK_TRANSFER', 'PIX', 'MANUAL'),
     bank: oneOf('Inter', 'Caixa', 'Sofisa', 'BB', 'Outro'), bankName: isString, sourceBank: isString, rawHash: isString,

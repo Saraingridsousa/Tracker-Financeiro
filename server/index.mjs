@@ -12,6 +12,7 @@ export async function startServer({ env = process.env, cwd = process.cwd(), port
   const config = loadConfig({ env, cwd });
   mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
   const store = new Store(join(config.dataDir, 'tracker.sqlite'));
+  try { store.configureConnections(config.connections); } catch(error) { store.close(); throw error; }
   const pluggy = new PluggyClient({ clientId: config.clientId, clientSecret: config.clientSecret, fetchImpl });
   const server = createAppServer({ store, pluggy, distDir, privateAccess: config.privateAccess });
   try {

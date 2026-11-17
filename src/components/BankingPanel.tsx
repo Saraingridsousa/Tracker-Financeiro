@@ -1,3 +1,4 @@
+import { BankProductsPanel } from './BankProductsPanel';
 import { useState } from 'react';
 import { Landmark, RefreshCw, ShieldCheck, Download, ExternalLink } from 'lucide-react';
 import type { BankingController } from '../hooks/useBanking';
@@ -39,16 +40,18 @@ export function BankingPanel({ banking }: { banking: BankingController }) {
       <button className={buttonClass} disabled={busy || snapshot.connections.length >= 5}>Registrar conexão</button>
     </form>
     <div className="space-y-3">{snapshot.connections.map((connection) => <article key={connection.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-      <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-medium">{connection.label || 'Conexão MeuPluggy'}</h3><p className="text-xs text-slate-500">Estado: {connection.status}</p></div>
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-medium">{connection.label || 'Conexão MeuPluggy'}</h3><p className="text-xs text-slate-500">Estado na Pluggy: {connection.status}{connection.executionStatus ? ` · ${connection.executionStatus}` : ''}</p><p className="text-xs text-slate-500">Identificação pelas contas: {connection.identification?.institutions?.join(', ') || 'pendente'} · {connection.identification?.state==='confirmed'?'confirmada':connection.identification?.state==='mismatch'?'divergência: confira o apelido':'confira os dados da conta'}</p></div>
         <button className={buttonClass} disabled={busy || !snapshot.configured} onClick={() => void banking.sync(connection.id)}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} />{busy ? 'Consultando…' : 'Sincronizar dados'}</button>
       </div>
-      <dl className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-3"><div><dt>Última consulta do Tracker</dt><dd>{dateLabel(connection.lastFetchedAt)}</dd></div><div><dt>Atualização no provedor</dt><dd>{dateLabel(connection.providerUpdatedAt)}</dd></div><div><dt>Autorização até</dt><dd>{dateLabel(connection.consentExpiresAt)}</dd></div></dl>
+      <dl className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-3"><div><dt>Última leitura bem-sucedida</dt><dd>{dateLabel(connection.lastSuccessfulSyncAt??connection.lastFetchedAt)}</dd></div><div><dt>Atualização no provedor</dt><dd>{dateLabel(connection.providerUpdatedAt)}</dd></div><div><dt>Autorização até</dt><dd>{dateLabel(connection.consentExpiresAt)}</dd></div></dl>
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500"><span>Última tentativa: {dateLabel(connection.lastAttemptAt??connection.lastFetchedAt)} · Leitura: {connection.syncMode==='incremental'?'janela com sobreposição':'histórico completo'}</span><button type="button" className="underline" disabled={busy||!snapshot.configured} onClick={()=>void banking.sync(connection.id,true)}>Reconferir histórico completo</button></div>
       {connection.lastError && <p role="alert" className="mt-2 text-sm text-rose-600">{connection.lastError}</p>}
     </article>)}</div>
     {snapshot.accounts.length > 0 && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{snapshot.accounts.map((account) => <article key={account.id} className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950">
-      <p className="text-sm font-medium">{account.name}</p><p className="text-xs text-slate-500">{account.type === 'CREDIT' ? 'Saldo de cartão — não é dinheiro disponível' : 'Saldo informado pelo banco'}</p>
+      <p className="text-sm font-medium">{account.institution?.name??snapshot.connections.find(c=>c.id===account.itemId)?.label} · {account.name}</p><p className="text-xs text-slate-500">Instituição: {account.institution?.code?`COMPE ${account.institution.code}`:account.institution?.source==='account.name'?'nome reportado pela conta':'identificação pendente'}</p><p className="text-xs text-slate-500">{account.type === 'CREDIT' ? 'Saldo de cartão — não é dinheiro disponível' : 'Saldo informado pelo banco'}</p>
       <p className="mt-2 text-xl font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: account.currencyCode }).format(account.balanceCents / 100)}</p>
     </article>)}</div>}
+    <BankProductsPanel snapshot={snapshot} />
     <p className="text-xs text-slate-500">As movimentações pendentes ficam visíveis, mas não entram no resultado liquidado. Transferências próprias precisam de classificação explícita. Backup bancário não contém suas chaves.</p>
   </section>;
 }

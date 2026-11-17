@@ -19,3 +19,10 @@ graphify-out/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+
+# Mapeamentos privados de conexões
+connections.json
+*.private.json
+
+# Arquivo privado de credenciais usado pelo launcher
+config.env

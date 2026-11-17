@@ -42,7 +42,7 @@ test('local overrides and hidden history survive sync and remain exportable with
     assert.equal(tx[0].categoryId, 'food');
     assert.equal(tx[0].manualCategory, true);
     const backup = store.backup();
-    assert.equal(backup.schemaVersion, 2);
+    assert.equal(backup.schemaVersion, 3);
     assert.equal(backup.transactions.length, 2);
     assert.equal(backup.transactions[0].description, 'Compra sintética');
     assert.equal(backup.overrides.find(o => o.transactionId === 'account-A:p2').hidden, true);
@@ -109,7 +109,7 @@ test('SQLite versioned store persists registered connections across reopening', 
   const dir = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'tracker-store-'));
   try {
     let store = new Store(join(dir, 'tracker.sqlite'));
-    assert.equal(store.schemaVersion, 3);
+    assert.equal(store.schemaVersion, 4);
     assert.deepEqual(store.snapshot(false), { configured: false, connections: [], accounts: [], transactions: [] });
     const connection = store.registerConnection({ itemId: ITEM, label: 'Banco sintético' });
     assert.equal(connection.id, ITEM);

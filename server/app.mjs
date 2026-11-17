@@ -1,3 +1,4 @@
+import { syncWindow } from './products.mjs';
 import { parsePrivateAccess, authorizeRequest } from './access.mjs';
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -72,11 +73,13 @@ export function createAppServer({ store, pluggy, now = () => new Date(), private
     if (req.method === 'POST' && syncMatch) {
       const id = decodeId(syncMatch[1]);
       if (!store.connections().some(c => c.id === id)) throw new HttpError(404, 'Conexão não encontrada.');
-      if (Object.keys(body).length) throw new HttpError(400, 'Consulta não recebe campos adicionais.');
+      if (Object.keys(body).some(k=>k!=='full') || ('full' in body && typeof body.full!=='boolean')) throw new HttpError(400, 'Campos de consulta inválidos.');
       if (syncing.has(id)) throw new HttpError(409, 'Esta conexão já está sendo consultada. Aguarde a conclusão.');
       syncing.add(id);
       try {
-        const batch = await pluggy.readItem(id);
+        const connection=store.connections().find(c=>c.id===id);
+        const window=body.full===true?{mode:'full'}:syncWindow(connection,now());
+        const batch = await pluggy.readItem(id,{label:connection.label,dateFrom:window.dateFrom,full:window.mode==='full'});
         store.applySync(id, batch, now().toISOString());
       } catch (error) {
         const message = error instanceof PluggyError ? error.message : 'Não foi possível concluir a consulta. O histórico foi preservado.';

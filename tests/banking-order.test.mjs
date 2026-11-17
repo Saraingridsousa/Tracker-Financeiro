@@ -52,3 +52,19 @@ test('late snapshot or error cannot overwrite a completed banking mutation', asy
     }
   }
 });
+
+
+test('failed sync rereads local error metadata and retains cache if backend is unreachable',async()=>{
+ const saved=new Map(['__failureHooks','__failureApi'].map(k=>[k,Object.getOwnPropertyDescriptor(globalThis,k)]));
+ try{
+ const source=readFileSync(new URL('../src/hooks/useBanking.ts',import.meta.url),'utf8').replace(/import \{([^}]+)\} from 'react';/,['useState','useRef','useCallback','useEffect'].map(name=>'const '+name+'=(...a)=>globalThis.__failureHooks.'+name+'(...a);').join('\n')).replace("import { createBankingApi } from '../lib/bankingApi';",'const createBankingApi=()=>({load:(...a)=>globalThis.__failureApi.load(...a),mutate:(...a)=>globalThis.__failureApi.mutate(...a)});');
+ const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+ const {useBanking}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+ for(const failReload of [false,true]){
+ const cells=[];let cursor=0;globalThis.__failureHooks={useState(initial){const i=cursor++;if(!(i in cells))cells[i]=initial;return[cells[i],v=>{cells[i]=v}]},useRef(initial){const i=cursor++;if(!(i in cells))cells[i]={current:initial};return cells[i]},useCallback:fn=>fn,useEffect:()=>{}};
+ const initial={configured:true,connections:[{status:'UPDATED'}],accounts:[{id:'cached'}],transactions:[]},failed={...initial,connections:[{status:'ERROR',lastAttemptAt:'2026-11-17T12:00:00Z'}]};
+ globalThis.__failureApi={load:async()=>{if(failReload)throw Error('local backend unavailable');return failed},mutate:async()=>{throw Error('provider failed')}};
+ const c=useBanking();cells[0]=initial;assert.equal(await c.sync('synthetic'),false);assert.deepEqual(cells[0],failReload?initial:failed);assert.equal(cells[2],'provider failed');assert.equal(cells[1],false);
+ }
+ }finally{for(const[k,d]of saved){if(d)Object.defineProperty(globalThis,k,d);else delete globalThis[k]}}
+});

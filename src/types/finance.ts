@@ -7,6 +7,7 @@ export interface Transaction {
   id: string;
   date: string; // ISO date YYYY-MM-DD
   description: string;
+  notes?: string;
   amount: number; // positive currency units for display; banking persistence uses amountCents
   type: TransactionType;
   categoryId: string;
@@ -28,6 +29,7 @@ export interface Transaction {
   manualCategory?: boolean;
   isInternalTransfer?: boolean;
   isSelfTransfer?: boolean;
+  manualSelfTransfer?: boolean;
   isInvestment?: boolean;
   isCreditCardPayment?: boolean;
   isNeutral?: boolean;

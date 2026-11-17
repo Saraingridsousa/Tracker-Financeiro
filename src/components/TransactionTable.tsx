@@ -405,6 +405,11 @@ export function TransactionTable({
                                   </span>
                                 )}
                               </div>
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                <button type="button" className="text-cyan-700 underline dark:text-cyan-300" onClick={() => { const notes=window.prompt('Anotação desta movimentação (até 2000 caracteres)',transaction.notes??'');if(notes===null)return;if(notes.length>2000){window.alert('A anotação deve ter no máximo 2.000 caracteres.');return;}onUpdateTransaction(transaction.id,{notes}); }}>{transaction.notes?'Editar anotação':'Anotar'}</button>
+                                {transaction.source==='pluggy'&&<label className="flex items-center gap-1"><input type="checkbox" checked={Boolean(transaction.isSelfTransfer)} onChange={event=>onUpdateTransaction(transaction.id,{isSelfTransfer:event.target.checked})}/>Transferência própria</label>}
+                              </div>
+                              {transaction.notes&&<p className="mt-1 max-w-sm whitespace-pre-wrap text-xs text-slate-500">{transaction.notes}</p>}
                             </div>
                           </td>
                           <td className="px-4 py-3">

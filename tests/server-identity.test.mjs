@@ -208,8 +208,8 @@ test('SQLite v1 upgrades atomically without losing raw records, overrides or hid
     legacy.prepare('INSERT INTO overrides VALUES (?,?,?,?,?)').run('account-A:hidden', null, 0, null, 1);
     legacy.close();
     store = new Store(filename);
-    assert.equal(store.schemaVersion, 3);
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 3);
+    assert.equal(store.schemaVersion, 4);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 4);
     assert.equal(store.snapshot(true).transactions.length, 1);
     assert.equal(store.snapshot(true).transactions[0].description, 'Minha correção');
     assert.equal(store.snapshot(true).transactions[0].categoryId, 'saude');

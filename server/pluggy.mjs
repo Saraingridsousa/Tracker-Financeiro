@@ -1,3 +1,7 @@
+import { toCents } from './money.mjs';
+export { toCents } from './money.mjs';
+import { accountInstitution, itemIdentification, ownTransferEvidence } from './institutions.mjs';
+import { normalizeBill, normalizeInvestment } from './products.mjs';
 export class PluggyError extends Error {
   constructor(code, message) { super(message); this.name = 'PluggyError'; this.code = code; }
 }
@@ -53,15 +57,18 @@ export class PluggyClient {
         if (attempt === 0) { await this.authenticate(); continue; }
         throw new PluggyError('AUTH', 'Não foi possível autenticar na Pluggy. Confira as credenciais no servidor.');
       }
-      if (!response.ok) throw new PluggyError('PROVIDER', 'Não foi possível consultar os dados na Pluggy. Tente novamente.');
+      if (!response.ok) { const error = new PluggyError('PROVIDER', 'Não foi possível consultar os dados na Pluggy. Tente novamente.'); error.status = response.status; throw error; }
       return response.data;
     }
   }
 
-  async readItem(itemId) {
+  async readItem(itemId, { label, dateFrom, full = !dateFrom } = {}) {
+    if (dateFrom !== undefined && (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !validTransactionDate(dateFrom))) throw new PluggyError('DATA', 'Janela de consulta inválida.');
     const item = await this.request(`/items/${encodeURIComponent(itemId)}`);
     if (!item || typeof item.status !== 'string') throw new PluggyError('DATA', 'Dados de item inválidos recebidos da Pluggy.');
     if (item.consentExpiresAt && Date.parse(item.consentExpiresAt) <= this.now()) throw new PluggyError('CONSENT_EXPIRED', 'Consentimento expirado. Renove o acesso no Meu Pluggy antes de consultar novamente.');
+    if (item.connector?.isSandbox === true || item.isSandbox === true) throw new PluggyError('SANDBOX', 'Este item é de teste; não foi importado como conta real.');
+    if (item.error || ['LOGIN_ERROR','ERROR','WAITING_USER_INPUT'].includes(item.status)) throw new PluggyError('ITEM', 'A conexão requer atenção no Meu Pluggy. O histórico foi preservado.');
     const rawAccounts = [];
     for (let page = 1, totalPages = 1; page <= totalPages; page++) {
       const result = await this.request(`/accounts?itemId=${encodeURIComponent(itemId)}&page=${page}`);
@@ -70,47 +77,54 @@ export class PluggyClient {
       totalPages = result.totalPages || 1;
       if (!Number.isInteger(totalPages) || totalPages < 1 || totalPages > this.maxPages) throw new PluggyError('PAGINATION', 'Limite de paginação excedido.');
     }
+    const accounts = rawAccounts.map(a => normalizeAccount(a, itemId));
     const transactions = [];
     for (const account of rawAccounts) {
-      let query = `?accountId=${encodeURIComponent(account.id)}`;
+      let query = `?accountId=${encodeURIComponent(account.id)}` + (dateFrom ? `&dateFrom=${encodeURIComponent(dateFrom)}` : '');
       const cursors = new Set();
       while (query) {
         if (cursors.has(query) || cursors.size >= this.maxPages) throw new Error('Loop ou limite de paginação de cursor.');
         cursors.add(query);
         const result = await this.request(`/v2/transactions${query}`);
         if (!Array.isArray(result?.results)) throw new PluggyError('DATA', 'Página de transações inválida recebida da Pluggy.');
-        transactions.push(...result.results.map(t => normalizeTransaction(t, account, item.connector?.name)));
+        transactions.push(...result.results.map(t => normalizeTransaction(t, account, accounts.find(a => a.id === account.id)?.institution.name || label || account.name)));
         query = result.next;
         if (query != null) {
           if (typeof query !== 'string' || !query.startsWith('?') || query.length > 8192 || /[#\r\n]/.test(query)) throw new Error('Cursor de paginação inválido.');
           const params = new URLSearchParams(query);
-          if (params.getAll('accountId').length !== 1 || params.get('accountId') !== account.id || params.getAll('after').length !== 1 || !params.get('after') || [...params.keys()].some(k => !['accountId','after'].includes(k))) throw new Error('Cursor de paginação inválido.');
+          if (params.getAll('accountId').length !== 1 || params.get('accountId') !== account.id || params.getAll('after').length !== 1 || !params.get('after') || [...params.keys()].some(k => !['accountId','after','dateFrom'].includes(k))) throw new Error('Cursor de paginação inválido.');
+          if (params.has('dateFrom') && (params.getAll('dateFrom').length !== 1 || params.get('dateFrom') !== dateFrom)) throw new Error('Filtro de cursor inválido.');
         }
       }
     }
-    return { accounts: rawAccounts.map(a => normalizeAccount(a, itemId)), transactions, status: item.status,
+    const bills = [], investments = [], productStates = {};
+    const readOptional = async (kind, path, key, value, normalize) => {
+      const collected = [];
+      try {
+        for (let page=1,totalPages=1;page<=totalPages;page++) {
+          const result=await this.request(path+'?'+key+'='+encodeURIComponent(value)+'&page='+page+'&pageSize=500');
+          if(!Array.isArray(result?.results))throw new Error('Página de produto inválida.');
+          totalPages=result.totalPages??1;if(!Number.isInteger(totalPages)||totalPages<1||totalPages>this.maxPages)throw new Error('Limite de paginação de produto.');
+          collected.push(...result.results.map(normalize));
+        }
+        return {rows:collected,state:collected.length?'available':'empty'};
+      } catch(error) { return {rows:[],state:[403,404].includes(error.status)?'unavailable':'error',message:[403,404].includes(error.status)?'Produto não disponibilizado por esta conexão.':'Não foi possível ler este produto; dados anteriores preservados.'}; }
+    };
+    const billResults=[];
+    for(const account of accounts.filter(a=>a.type==='CREDIT')){const result=await readOptional('bills','/bills','accountId',account.id,r=>normalizeBill(r,account));bills.push(...result.rows);billResults.push({accountId:account.id,...result,rows:undefined});}
+    productStates.bills={state:billResults.some(r=>r.state==='error')?'error':bills.length?'available':billResults.some(r=>r.state==='unavailable')?'unavailable':'empty',returned:bills.length,accounts:billResults};
+    const result=await readOptional('investments','/investments','itemId',itemId,r=>normalizeInvestment(r,itemId));investments.push(...result.rows);productStates.investments={state:result.state,returned:result.rows.length,...(result.message?{message:result.message}:{})};
+    return { accounts, transactions, bills, investments, productStates, identification:itemIdentification(accounts,label), syncMode:full?'full':'incremental', executionStatus:typeof item.executionStatus==='string'?item.executionStatus:null, status: item.status,
       providerUpdatedAt: item.lastUpdatedAt || item.updatedAt || null, consentExpiresAt: item.consentExpiresAt || null };
   }
 }
 
-export function toCents(value) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('Valor monetário inválido.');
-  const sign = value < 0 ? -1 : 1;
-  const [mantissa, exponent = '0'] = Math.abs(value).toString().toLowerCase().split('e');
-  const [whole, fraction = ''] = mantissa.split('.');
-  const digits = BigInt(whole + fraction);
-  const power = Number(exponent) - fraction.length + 2;
-  const divisor = 10n ** BigInt(Math.max(0, -power));
-  const cents = power >= 0 ? digits * 10n ** BigInt(power) : (digits + divisor / 2n) / divisor;
-  const result = Number(cents) * sign;
-  if (!Number.isSafeInteger(result)) throw new Error('Valor monetário fora do limite.');
-  return result;
-}
-
 export function normalizeAccount(account, itemId) {
-  if ((account.itemId !== undefined && account.itemId !== itemId) || !validId(account.id) || !['BANK','CREDIT'].includes(account.type) || typeof account.name !== 'string' || !currency(account.currencyCode)) throw new Error('Dados de conta inválidos.');
+  if ((account.itemId !== undefined && (typeof account.itemId !== 'string' || account.itemId.toLowerCase() !== itemId.toLowerCase())) || !validId(account.id) || !['BANK','CREDIT'].includes(account.type) || typeof account.name !== 'string' || !currency(account.currencyCode)) throw new Error('Dados de conta inválidos.');
   return { id: account.id, itemId, name: account.name, type: account.type,
-    currencyCode: account.currencyCode, balanceCents: toCents(account.balance) };
+    currencyCode: account.currencyCode, balanceCents: toCents(account.balance), institution: accountInstitution(account),
+    ...(typeof account.subtype==='string'?{subtype:account.subtype}:{}),
+    ...(account.creditData?{creditData:{...pick(account.creditData,['brand','status','holderType']),creditLimitCents:account.creditData.creditLimit==null?null:toCents(account.creditData.creditLimit),availableCreditLimitCents:account.creditData.availableCreditLimit==null?null:toCents(account.creditData.availableCreditLimit),dueDate:account.creditData.balanceDueDate?.slice(0,10)??null}}:{}) };
 }
 
 export function normalizeTransaction(transaction, account, bankName = '') {
@@ -134,6 +148,8 @@ export function normalizeTransaction(transaction, account, bankName = '') {
     creditCardMetadata: { ...pick(transaction.creditCardMetadata, ['installmentNumber','totalInstallments','purchaseDate','billId']),
       ...(transaction.creditCardMetadata?.totalAmount != null ? { totalAmountCents: toCents(transaction.creditCardMetadata.totalAmount) } : {}),
     },
+    isSelfTransfer: ownTransferEvidence(transaction, account),
+    ...(ownTransferEvidence(transaction, account)?{selfTransferEvidence:'matching-owner-documents'}:{}),
     isCreditCardPayment: /^(?:pagamento (?:de )?fatura|credit card payment|invoice payment|statement payment)$/i.test(transaction.description.trim()) || /^(?:credit card payment|pagamento de fatura)$/i.test(transaction.category || '') || /^(?:PAGAMENTO_FATURA|CREDIT_CARD_PAYMENT)$/.test(transaction.operationType || ''),
   };
 }

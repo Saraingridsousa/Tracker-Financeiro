@@ -19,7 +19,9 @@ export function inferCategory(description: string, categories: Category[], rules
 export function classifyTransaction(transaction: Transaction, categories: Category[] = []): Transaction {
   const text = normalizeFinanceText(transaction.description);
   const category = categories.find((entry) => entry.id === transaction.categoryId);
-  const isSelfTransfer = transaction.isSelfTransfer === true || transaction.categoryId === 'transferencia';
+  const manualTransferRejected = transaction.manualSelfTransfer === true && transaction.isSelfTransfer === false;
+  const isSelfTransfer = !manualTransferRejected && (transaction.isSelfTransfer === true || transaction.categoryId === 'transferencia');
+  const categoryNeutral = !(manualTransferRejected && transaction.categoryId === 'transferencia') && (category?.isNeutral || category?.excludeFromTotals);
   const isCreditCardPayment = transaction.isCreditCardPayment === true || transaction.categoryId === 'pagamento_fatura' || text === 'statement payment' || /pagamento (?:de )?fatura|pgto fatura|pagamento efetuado.*fatura/.test(text);
   // Category inference already applies rules before keywords; a specific known
   // category (including a manual correction) must outrank this weaker text hint.
@@ -31,7 +33,7 @@ export function classifyTransaction(transaction: Transaction, categories: Catego
     isInternalTransfer: isSelfTransfer,
     isCreditCardPayment,
     isInvestment,
-    isNeutral: Boolean(isSelfTransfer || isCreditCardPayment || isInvestment || category?.isNeutral || category?.excludeFromTotals),
+    isNeutral: Boolean(isSelfTransfer || isCreditCardPayment || isInvestment || categoryNeutral),
   };
 }
 

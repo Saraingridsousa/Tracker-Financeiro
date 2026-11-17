@@ -1,8 +1,23 @@
 # Estado — Tracker Financeiro / Meu Pluggy
 
-Estado vigente: início do zero solicitado por Sara. A seção abaixo prevalece sobre a busca/restauração histórica, cancelada pela titular. As verificações anteriores permanecem documentadas em seus próprios marcos.
+## Ativação bancária real — 17/11/2026
 
-## Início do zero — estado vigente
+**Integração local ativada e leitura real verificada** após a titular preencher uma nova credencial pelo formulário nativo privado. Esta seção prevalece sobre os bloqueios históricos de configuração/consentimento abaixo. Configuração e mapeamento permanecem em `%LOCALAPPDATA%/TrackerFinanceiro`, fora do Git e do OneDrive. Nenhum segredo foi incorporado ao código.
+
+As quatro conexões fornecidas foram consultadas pelo backend e lidas novamente por `/api/banking`, com persistência SQLite e interface compilada reais. PicPay, Mercado Pago e Inter retornaram contas/movimentações; o item apelidado Sofisa retornou investimentos, sem contas/movimentações nessa leitura. A confirmação automática da instituição por contas permanece parcial para PicPay/Inter e indisponível para Sofisa; não se confundiu o apelido com identificação confirmada.
+
+Verificações da ativação: suíte do snapshot executado com 158 testes passando/zero falhas, TypeScript app/node e Vite build com exit 0; sincronização repetida sem aumento das contagens ou IDs duplicados; documento compartilhado manual intacto; SQLite integrity_check OK; segredo ausente do snapshot público, seis arquivos do build e logs de runtime inspecionados. Houve avisos Vite/esbuild durante encerramento de harnesses e de bundle grande; não se afirma saída sem avisos nem auditoria integral das finanças. Produtos conectados continuam separados da carteira manual.
+
+Evidência privada e contagens reais em `%LOCALAPPDATA%/TrackerFinanceiro/verification/`: `tracker-live-sync.json`, `persisted-live-summary.json`, `rendered-live-check.json`, `activation-verification.json`, `tests-current.log`, `build-current.log` e backup anterior à leitura. Endereço compilado verificado: `http://127.0.0.1:3001`; processo de desenvolvimento também mantém a porta 5173. Somente processos identificados deste Tracker foram reiniciados. Sem pagamentos, publicação, push ou novos consentimentos.
+
+Há outro editor ativo no checkout: `src/hooks/useBanking.ts` mudou depois do snapshot testado/compilado. A ativação não editou código de produção, não desfez alterações preexistentes e não substitui o aceite das mudanças concorrentes. Esta verificação comprova conexão/importação e interface observadas, não conciliação integral com extratos nem classificação perfeita de cada lançamento. Acesso remoto pelo celular continua separado desta ativação local.
+
+## Marco anterior — início do zero
+
+O início do zero abaixo permanece como histórico de preservação. O documento manual foi preservado durante a ativação; os dados bancários foram adicionados às tabelas separadas da integração.
+
+
+## Início do zero — marco anterior
 
 Sara confirmou explicitamente que não quer usar dados antigos. Criado documento novo no SQLite por API local com CSRF/revisão esperada: **revisão 1, zero transações, regras personalizadas, ativos e ordens; 12 categorias padrão do código**. Nenhum backup antigo foi lido/restaurado para criar esse documento. Cópias antigas continuam arquivadas fora do Git. Não é necessário continuar procurando ou escolhendo o backup anterior para esse início.
 
@@ -155,6 +170,6 @@ Foi criado **somente se ausente** um modelo vazio em C:/Users/sarai/AppData/Loca
 
 Para executar: na pasta/branch corretas, npm.cmd run build e npm.cmd start; abrir http://127.0.0.1:3001. npm.cmd test executa a suíte; npm.cmd run dev usa frontend 127.0.0.1:5173 + API 3001. Ctrl+C encerra. A instalação usa npm.cmd ci com lockfile; os checks desta manutenção usaram --ignore-scripts/--no-audit e audit explícito separado.
 
-A etapa bancária real continua **blocked por dados/participação necessários**, não por nova solicitação de autorização: faltam criação das conexões/consentimentos no Meu Pluggy e preenchimento privado da configuração. Portal, bancos e acesso remoto já foram confirmados. Silêncio não configura consentimento bancário nem credenciais. Nenhuma chamada ao banco será inventada. Após esses pré-requisitos, comparar amostras de sinais, moedas, datas, compras/faturas/pendências, duplicações, histórico e saldos, com retenção mínima e evidência anonimizada.
+Naquele marco de 16/11, a etapa bancária real estava **pendente de dados/participação necessários**, não por nova solicitação de autorização: faltam criação das conexões/consentimentos no Meu Pluggy e preenchimento privado da configuração. Portal, bancos e acesso remoto já foram confirmados. Silêncio não configura consentimento bancário nem credenciais. Nenhuma chamada ao banco será inventada. Após esses pré-requisitos, comparar amostras de sinais, moedas, datas, compras/faturas/pendências, duplicações, histórico e saldos, com retenção mínima e evidência anonimizada.
 
 Condições pessoais e fluxo continuam conforme as [fontes oficiais](https://docs.pluggy.ai/en/docs/guides/meu-pluggy-personal-use) e [guia Meu Pluggy](https://meu.pluggy.ai/api-guide) reconfirmados em 16/11/2026; cobertura/histórico da conta concreta ainda não verificados.

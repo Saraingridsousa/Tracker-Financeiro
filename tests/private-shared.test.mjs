@@ -62,13 +62,13 @@ test('shared document is explicit, validated, atomic and revision guarded over H
   assert.equal((await call('/api/shared-state',{method:'POST',headers,body:JSON.stringify({revision:2,payload:document(),extra:true})})).status,400);
 });
 
-test('shared state survives reopen while banking export contract remains version 2',()=>{
+test('shared state survives reopen while banking export includes products in version 3',()=>{
   const dir=mkdtempSync(join(tmpdir(),'tracker-shared-'));let store;
   try {
     const file=join(dir,'state.sqlite');store=new Store(file);
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version,3);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version,4);
     store.saveSharedState(0,document());const before=store.sharedState();store.close();store=new Store(file);
-    assert.deepEqual(store.sharedState(),before);assert.equal(store.backup().schemaVersion,2);assert.equal('payload' in store.backup(),false);
+    assert.deepEqual(store.sharedState(),before);assert.equal(store.backup().schemaVersion,3);assert.equal('payload' in store.backup(),false);
   }finally{store?.close();rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -91,8 +91,8 @@ test('separate SQLite connections enforce revision CAS and v2 migration preserve
  const dir=mkdtempSync(join(tmpdir(),'tracker-cas-'));let a,b;
  try {
    const file=join(dir,'state.sqlite');a=new Store(file);a.registerConnection({itemId:'11111111-1111-4111-8111-111111111111',label:'Synthetic'});
-   const before=a.backup();a.db.exec('DROP TABLE shared_state; PRAGMA user_version=2;');a.close();a=new Store(file);b=new Store(file);
-   assert.deepEqual(a.backup().connections,before.connections);assert.equal(a.db.prepare('PRAGMA user_version').get().user_version,3);
+   const before=a.backup();a.db.exec('DROP TABLE bank_products; DROP TABLE connection_sync; DROP TABLE transaction_annotations; DROP TABLE shared_state; PRAGMA user_version=2;');a.close();a=new Store(file);b=new Store(file);
+   assert.deepEqual(a.backup().connections,before.connections);assert.equal(a.db.prepare('PRAGMA user_version').get().user_version,4);
    assert.equal(a.sharedState().revision,0);const readByB=b.sharedState().revision;
    a.saveSharedState(0,document());assert.throws(()=>b.saveSharedState(readByB,document()),{code:'REVISION_CONFLICT'});
    assert.equal(b.sharedState().revision,1);b.saveSharedState(1,{...document(),categories:[]});assert.equal(a.sharedState().revision,2);
