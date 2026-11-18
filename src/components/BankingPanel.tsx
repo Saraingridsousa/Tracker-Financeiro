@@ -14,7 +14,7 @@ export function BankingPanel({ banking, onShowInvestments }: { banking: BankingC
   return <section aria-labelledby="banking-title" className="space-y-5 rounded-2xl border border-cyan-200 bg-white p-6 shadow-sm dark:border-cyan-900 dark:bg-slate-900">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div><div className="mb-2 flex items-center gap-2 text-cyan-600"><Landmark className="h-5 w-5" /><span className="text-xs font-semibold uppercase tracking-widest">Bancos conectados</span></div>
-        <h2 id="banking-title" className="text-xl font-semibold">Suas movimentações, sem depender de PDF</h2>
+        <h2 id="banking-title" className="text-xl font-semibold">Gerencie seus bancos</h2>
         <p className="mt-2 max-w-3xl text-sm text-slate-500 dark:text-slate-400">Meu Pluggy pessoal: atualização bancária a cada 24 horas. Sincronizar aqui lê os dados já disponíveis, sem forçar uma atualização do banco.</p>
       </div>
       <button className={buttonClass} disabled={busy} onClick={() => void banking.downloadBackup()}><Download className="h-4 w-4" />Backup bancário</button>

@@ -1,6 +1,6 @@
 # Tracker Financeiro
 
-Finanças pessoais em React/TypeScript, com consulta de contas e movimentações pelo **Meu Pluggy pessoal**, backend local e histórico opcional importado de arquivos.
+Finanças pessoais em React/TypeScript, com consulta de contas, movimentações e investimentos pelo **Meu Pluggy pessoal** e backend local.
 
 > Integração dos quatro itens existentes verificada com leituras reais em 17/11/2026, além dos testes sintéticos. Identificação pelas contas: Mercado Pago confirmada; PicPay/Inter parcial; item apelidado Sofisa retornou investimentos sem contas e continua sem confirmação de instituição. Não é aplicativo multiusuário nem serviço para exposição na internet.
 
@@ -50,26 +50,26 @@ Fontes oficiais: [guia pessoal](https://docs.pluggy.ai/en/docs/guides/meu-pluggy
 - Edições manuais de descrição/categoria, anotações e marca de transferência própria são preservadas nas consultas seguintes. Excluir uma movimentação conectada a oculta localmente: não altera o banco nem a Pluggy.
 - Falhas, consentimento expirado ou uma resposta vazia não apagam o histórico já armazenado.
 - **Backup bancário v3** exporta histórico conectado, produtos e edições manuais, sem credenciais. O SQLite usa migração aditiva v4. É um arquivo financeiro privado; guarde com cuidado. A restauração bancária pela interface não faz parte deste incremento.
-- **Backup do histórico e preferências** mantém o fluxo JSON anterior para importações, categorias, regras e investimentos cadastrados. São dois conjuntos distintos, não um backup único.
-- Dados antigos em `localStorage` não são apagados nem transferidos silenciosamente para o SQLite. Estão em **Histórico importado**, no mesmo navegador/origem em que foram salvos. Desenvolvimento e produção usam portas/origens diferentes; exporte o histórico antes de mudar de origem.
+- Históricos e carteiras manuais anteriormente salvos permanecem preservados, mas não são oferecidos como fonte ou cadastro na interface. Os módulos de compatibilidade continuam validando os documentos anteriores.
+- Dados antigos em `localStorage` não são apagados nem transferidos silenciosamente para o SQLite. O painel mostra somente bancos conectados. Desenvolvimento e produção usam portas/origens diferentes; o armazenamento anterior permanece em sua origem.
 
 ## Navegação do painel
 
 - **Visão Geral** abre primeiro com indicadores, gráficos e transações. O card bancário mostra o saldo líquido atual das posições elegíveis, sem aplicar o filtro mensal às posições.
-- **Investimentos** abre nos conectados da Pluggy, com filtros e histórico de resgatados. Instituições sem contas bancárias também aparecem. A **Carteira manual** continua separada e suas edições não alteram investimentos no banco.
+- **Investimentos** mostra somente posições conectadas da Pluggy, com filtros e histórico de resgatados. Instituições sem contas bancárias também aparecem.
 - **Conexões** reúne configuração, sincronização, reconferência, consentimentos, backup bancário, saldos e faturas. Trocar de aba não sincroniza o provedor.
 
 Aplicações e reservas reconhecidas como investimento ficam fora dos gastos; na tabela, aparecem como **Investimento · fora dos gastos**, com filtro próprio, mantendo o histórico e o sentido bancário original. Valores de moedas diferentes ficam separados. Cobertura parcial, leitura antiga e situações desconhecidas são sinalizadas; valores preservados em falhas são o último valor conhecido. Detalhes da política e aceite em [PG-004](docs/specs/pg-004-abas-investimentos-conectados.md) e [ADR 005](docs/decisions/005-investimentos-conectados.md).
 
 ## Como interpretar o painel
 
-- **Bancos conectados** e **Histórico importado** são fontes separadas: não são somadas automaticamente para evitar duplicar gastos de extratos já importados.
+- A interface usa somente os dados dos **bancos conectados**. Não há seletor de histórico importado, upload de extratos ou cadastro de carteira/operações manuais. Categorias, regras e correções dos lançamentos conectados continuam disponíveis.
 - **Resultado do período** é entrada menos despesa liquidada em BRL; não é o saldo bancário. Saldos informados pelo provedor aparecem por conta. Saldo de cartão não é dinheiro disponível.
 - Pendentes e moedas diferentes de BRL ficam fora do resultado padrão. Transações pendentes aparecem identificadas na tabela.
 - Pix é um meio de pagamento, não prova de mesma titularidade. Transferência própria usa classificação explícita ou documentos completos e válidos iguais ao titular, comparados somente em memória. O checkbox permite corrigir a inferência; desmarcar prevalece sobre categoria de transferência. Fatura, investimento ou outra categoria excluída mantêm sua neutralidade independente.
 - Regras ativas de categoria válida prevalecem sobre palavras-chave; o padrão mais específico tem prioridade. A categoria manual de uma transação conectada prevalece sobre a classificação automática.
 - Faturas por cartão e posições de investimentos são consultadas quando a API retorna dados válidos. O painel distingue dados retornados, vazio, indisponível e erro, inclusive por cartão. Produtos anteriores são preservados em falhas/vazios, com data da consulta. Não são geradas despesas extras pelas faturas nem ordens na carteira manual; cotações, B3 e movimentos de investimentos não são importados.
-- PDF/CSV/Excel/OFX continuam como alternativa histórica, não como etapa necessária da consulta bancária. Os importadores legados não foram inteiramente corrigidos nesta mudança.
+- Importação PDF/CSV/Excel/OFX e restauração de arquivos não são oferecidas no painel. Código legado de compatibilidade permanece isolado do fluxo principal, sem apagar dados salvos.
 
 A primeira leitura é integral. As seguintes usam sobreposição de 30 dias; a cada sete dias ou pelo botão **Reconferir histórico completo**, uma leitura integral procura correções mais antigas. Ausências não apagam registros. A interface separa última leitura bem-sucedida, tentativa e atualização na Pluggy.
 
@@ -90,7 +90,7 @@ O Graphify é usado localmente para mapear relações do código. Saídas gerada
 
 O SQLite migra v1 → v2 de forma transacional. Um novo ID só substitui uma versão antiga por `providerId` textual não vazio, em correspondência 1:1 não ambígua na mesma conta/item. NSU/providerCode, descrição, data e valor não são chaves universais. IDs aposentados não voltam ao resultado por replay; colisões posteriores podem revogar a associação, com auditoria. Updates do mesmo ID sobrescrevem a observação anterior: isto não é um log imutável de cada consulta. Sem identidade suficiente, as operações ficam separadas e exigem conferência. Não há fusão automática entre itens/reconexões.
 
-O backup bancário v2 conserva versões, reconciliações e overrides; valores convertidos pelo provedor retêm moeda/centavos originais com sinal e a origem do valor usado. Exportar esse JSON não comprova recuperação de desastre. O restaurador legado aceita `transactions`, `categories`, `rules`, `exportedAt`, sem exigir versão nova. `assets` e `investmentOrders` devem estar ambos presentes ou ambos ausentes; ausência preserva a carteira, arrays vazios válidos podem esvaziá-la. Arquivo bancário ou inválido é rejeitado antes de setters/escritas.
+O backup bancário v2 conserva versões, reconciliações e overrides; valores convertidos pelo provedor retêm moeda/centavos originais com sinal e a origem do valor usado. Exportar esse JSON não comprova recuperação de desastre. O validador/restaurador legado, mantido como compatibilidade interna e fora da interface, aceita `transactions`, `categories`, `rules`, `exportedAt`, sem exigir versão nova. `assets` e `investmentOrders` devem estar ambos presentes ou ambos ausentes; ausência preserva a carteira, arrays vazios válidos podem esvaziá-la. Arquivo bancário ou inválido é rejeitado antes de setters/escritas.
 
 Mês bancário usa o relógio local do PC; histórico usa a maior data válida do extrato e mostra “Último mês importado”. Janelas incluem o mês de referência mais 1, 2, 5 ou 11 meses anteriores (2/3/6/12 meses), do primeiro dia inicial inclusivo ao primeiro dia do mês seguinte exclusivo. “Todos” não aplica esse corte. A virada do mês é percebida no próximo render; não há timer ou sincronização agendada. Datas civis são mantidas; em timestamps do provedor, `date` conserva o prefixo de calendário fornecido, com `providerDate` original retido, sem conversão automática para GMT-3.
 

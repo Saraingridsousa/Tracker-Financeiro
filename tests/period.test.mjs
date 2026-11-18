@@ -111,18 +111,18 @@ test('F5: App encaminha Mês atual bancario ao relogio, sem usar a maior data', 
   });
 });
 
-test('F5: historico usa sua ultima data e App identifica explicitamente o ultimo mes importado', () => {
+test('F5: legacy period utility remains compatible while App only shows banking data', () => {
   const historical = [tx('old-march', '2024-03-15'), tx('old-february', '2024-02-29')];
   assert.deepEqual(filterTransactionsByPeriod(historical, 'month', { source: 'legacy', now: () => new Date(2026, 10, 9) }).map(item => item.id), ['old-march']);
   withApp(({ render, legacy }) => {
     const props = { now: () => new Date(2026, 10, 9) };
     let tree = render(props);
     walk(tree, node => node.type === 'select' && node.props.value === 'all').props.onChange({ target: { value: 'month' } });
-    walk(tree, node => node.type === 'select' && node.props['aria-label'] === 'Fonte dos dados').props.onChange({ target: { value: 'legacy' } });
+    assert.equal(walk(tree, node => node.type === 'select' && node.props['aria-label'] === 'Fonte dos dados'), undefined);
     tree = render(props);
     const monthOption = walk(tree, node => node.type === 'option' && node.props.value === 'month');
-    assert.match(monthOption.props.children, /[uú]ltimo m[eê]s importado/i);
-    assert.deepEqual(walk(tree, node => node.type?.name === 'TransactionTable').props.transactions.map(item => item.id), [legacy.id]);
+    assert.equal(monthOption.props.children, 'Mês atual');
+    assert.deepEqual(walk(tree, node => node.type?.name === 'TransactionTable').props.transactions.map(item => item.id), ['posted-current']);
   });
 });
 

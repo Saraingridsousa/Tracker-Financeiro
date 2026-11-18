@@ -18,12 +18,14 @@
 6. **Classe** = tipo + subtipo traduzidos. `EQUITY` sem subtipo é “Renda variável · subtipo não informado”, nunca “Ações”.
 7. **Instituição** = apelido da conexão; a interface informa se a instituição foi confirmada pelas contas ou é apenas apelido. Item sem contas (Sofisa) aparece normalmente.
 8. **Cobertura** por conexão: completa, vazia, erro, indisponível ou não consultada; conexão com `lastError` ou posição com situação desconhecida também conta como parcial. Leitura mais recente com mais de 48 h → dados antigos.
-9. **Carteiras separadas**: conectada e manual nunca são somadas; edição manual não altera dados do banco; conectados não viram ativos manuais.
-10. **Card da Visão Geral**: no modo bancos conectados usa o mesmo resumo do seletor (mesmo objeto passado à aba Investimentos); sem conexões/não consultado mostra “—” com explicação; carregando mostra “Carregando…”. No modo histórico importado permanece o valor atual da carteira manual, rotulado.
+9. **Somente carteira conectada na interface**: por decisão posterior de Sara, a carteira manual deixa de ser oferecida. Seus dados anteriores são preservados; conectados não viram ativos/ordens manuais e não são somados a eles.
+10. **Card da Visão Geral**: usa somente o resumo conectado (mesmo seletor da aba Investimentos); sem conexões/não consultado mostra “—” com explicação; carregando mostra “Carregando…”. Histórico importado e indicador manual foram retirados da interface por preferência posterior de Sara.
 11. **Abas**: estado bancário fica no `useBanking` do App; abas são renderização condicional sem efeitos de rede. Conteúdo da Visão Geral permanece no App (testes existentes inspecionam a árvore); novas áreas são componentes pequenos.
 
 
 12. **Investimento não é gasto.** A classificação financeira compartilhada exclui aplicações/resgates do resultado de consumo. A tabela usa essa classificação para rótulo e filtros, sem modificar o sentido bancário original do lançamento. Descritores iniciados por `aporte na carteira` ou `dinheiro reservado`, seguidos de `cofrinho`, são alocações neutras quando não há categoria específica. A palavra cofrinho isolada não é suficiente; uma compra comum continua despesa. Correção manual e categoria específica prevalecem. Não inferir posição atual a partir dessa classificação.
+
+13. **Retirada dos fluxos manuais**: remover upload/importação/restauração, seletor de fontes, carteira manual e comandos de limpeza do App, sem apagar dados. Preferências/categorias e correções dos registros conectados permanecem. Compartilhamento mantém erros, rascunhos e proteção de concorrência; somente quando o documento não existe há inicialização explícita de preferências vazias de movimentações/ativos, protegida pela revisão CAS existente. Recuperação/exportação de rascunho não é criação de movimentações.
 
 ## Implementação e evidência
 

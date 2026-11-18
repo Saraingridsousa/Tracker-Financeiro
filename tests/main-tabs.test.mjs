@@ -20,9 +20,9 @@ test('main tabs support arrows, wrapping, Home and End with focus and ARIA', asy
   globalThis.document = { getElementById: id => ({ focus: () => focused.push(id) }) };
   const tree = MainTabs({ active: 'overview', onChange: key => chosen.push(key) });
   const buttons = tree.props.children;
-  assert.deepEqual(buttons.map(b => b.props.tabIndex), [0, -1, -1]);
+  assert.deepEqual(buttons.map(b => b.props.tabIndex), [0, -1, -1, -1]);
   assert.equal(buttons[0].props['aria-selected'], true);
-  for (const [index, key, expected] of [[0, 'ArrowRight', 'investments'], [2, 'ArrowRight', 'overview'], [0, 'ArrowLeft', 'connections'], [1, 'Home', 'overview'], [0, 'End', 'connections']]) {
+  for (const [index, key, expected] of [[0, 'ArrowRight', 'investments'], [3, 'ArrowRight', 'overview'], [0, 'ArrowLeft', 'connections'], [1, 'Home', 'overview'], [0, 'End', 'connections']]) {
    let prevented = false;
    buttons[index].props.onKeyDown({ key, preventDefault: () => { prevented = true; } });
    assert.equal(prevented, true); assert.equal(chosen.at(-1), expected); assert.equal(focused.at(-1), 'tab-' + expected);
@@ -33,7 +33,7 @@ test('main tabs support arrows, wrapping, Home and End with focus and ARIA', asy
  } finally { if (previous) Object.defineProperty(globalThis, 'document', previous); else delete globalThis.document; await vite.close(); }
 });
 
-test('switching main views keeps one banking controller, connected total ignores month, manual stays separate', async () => {
+test('switching main views keeps one banking controller, connected total ignores month, manual data stays preserved without manual controls', async () => {
  const saved = new Map(['window', '__tabsHooks', '__tabsBanking'].map(k => [k, Object.getOwnPropertyDescriptor(globalThis, k)]));
  let cursor = 0; const cells = [];
  globalThis.__tabsHooks = {
@@ -61,16 +61,17 @@ test('switching main views keeps one banking controller, connected total ignores
   tabs().props.onChange('investments'); tree = render();
   const connected = walk(tree, n => n.type?.name === 'ConnectedInvestments');
   assert.equal(connected.props.summary.primary.cents, value.props.summary.primary.cents);
-  const manualButton = walk(tree, n => n.type === 'button' && n.props.children === 'Carteira manual');
-  manualButton.props.onClick(); tree = render();
-  const manual = walk(tree, n => n.type?.name === 'InvestmentsDashboard');
-  assert.equal(manual.props.assets.length, 1); assert.equal(manual.props.assets[0].id, 'manual');
+  assert.equal(walk(tree, n => n.type === 'button' && n.props.children === 'Carteira manual'), undefined);
+  assert.equal(walk(tree, n => n.type?.name === 'InvestmentsDashboard'), undefined);
+  assert.equal(walk(tree, n => n.type === 'input' && n.props.type === 'file'), undefined);
   tabs().props.onChange('connections'); tree = render();
   assert.equal(walk(tree, n => n.type?.name === 'BankingPanel').props.banking, globalThis.__tabsBanking);
   tabs().props.onChange('overview'); tree = render();
   assert.equal(walk(tree, n => n.type?.name === 'ConnectedInvestmentValue').props.summary.primary.cents, 12345);
   assert.deepEqual(calls, []);
   assert.equal(storage.size, 1);
+  assert.equal(JSON.parse(storage.get('tracker-financeiro:investments'))[0].id, 'manual');
+  assert.equal(walk(tree, n => n.type === 'select' && n.props['aria-label'] === 'Fonte dos dados'), undefined);
  } finally { await vite.close(); for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; } }
 });
 
@@ -79,10 +80,11 @@ test('compact shared status retains full conflict and recovery controls', async 
  try {
   const { SharedFinancePanel } = await vite.ssrLoadModule('/src/components/SharedFinancePanel.tsx');
   const status = { ready: true, payload: {}, revision: 1, busy: false, error: '', draft: null };
-  const render = extra => renderToStaticMarkup(createElement(SharedFinancePanel, { shared: { enabled: true, status: { ...status, ...extra } }, browserCopy() {} }));
+  const render = extra => renderToStaticMarkup(createElement(SharedFinancePanel, { shared: { enabled: true, status: { ...status, ...extra } }, initialCategories: [] }));
   assert.match(render({}), /<details>/);
   assert.match(render({ error: 'Conflito de gravação', draft: {} }), /role="alert"/);
   assert.match(render({ error: 'Conflito de gravação', draft: {} }), /Exportar rascunho não confirmado/);
-  assert.match(render({ payload: null }), /Conferir cópia deste navegador/);
+  assert.match(render({ payload: null }), /Ativar preferências no PC/);
+  assert.doesNotMatch(render({ payload: null }), /Conferir cópia|Conferir backup|type="file"/);
  } finally { await vite.close(); }
 });

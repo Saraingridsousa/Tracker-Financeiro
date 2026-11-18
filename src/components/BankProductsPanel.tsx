@@ -6,7 +6,7 @@ export function BankProductsPanel({snapshot,onShowInvestments}:{snapshot:Banking
  if(!snapshot.connections.length)return null;
  return <section aria-label="Faturas e investimentos conectados" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
   <h3 className="text-lg font-semibold">Faturas e investimentos conectados</h3>
-  <p className="text-sm text-slate-500">Informações de consulta. Faturas não geram uma segunda despesa; investimentos conectados ficam separados da carteira manual.</p>
+  <p className="text-sm text-slate-500">Informações de consulta. Faturas não geram uma segunda despesa; as posições ficam na aba Investimentos.</p>
   <details><summary className="cursor-pointer text-sm font-medium">Faturas e diagnóstico por conexão</summary>
   {snapshot.connections.map(connection=><article key={connection.id} className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
    <h4 className="font-medium">{connection.label}</h4>

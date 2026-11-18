@@ -14,6 +14,7 @@ export function ConnectedInvestments({ summary, transactions = [], categories = 
   const [institution, setInstitution] = useState('');
   const [classKey, setClassKey] = useState('');
   const [situation, setSituation] = useState<Situation | 'all'>('active');
+  const [selectedCashFlowMonth, setSelectedCashFlowMonth] = useState('');
   const positions = filterConnectedPositions(summary.positions, { institution, classKey, situation });
   const messages: Record<string, string> = { loading: 'Carregando investimentos…', loadError: 'Falha na leitura local. Tente ler o PC novamente.', noConnections: 'Nenhuma conexão registrada. Acesse Conexões.', notQueried: 'Investimentos ainda não consultados ou indisponíveis. Confira Conexões.' };
   const classes = [...new Map(summary.positions.map(p => [p.classKey, p.classLabel])).entries()];
@@ -43,6 +44,16 @@ export function ConnectedInvestments({ summary, transactions = [], categories = 
     });
     return [...monthly.values()].sort((left, right) => left.sortKey.localeCompare(right.sortKey));
   }, [transactions, categories]);
+
+  const selectedCashFlowTransactions = useMemo(() => {
+    if (!selectedCashFlowMonth) return [];
+    return transactions
+      .filter((transaction) => {
+        const classified = classifyTransaction(transaction, categories);
+        return classified.isInvestment && transaction.date.slice(0, 7) === selectedCashFlowMonth;
+      })
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [transactions, categories, selectedCashFlowMonth]);
   return <section aria-label="Investimentos conectados" className="space-y-5">
     <div className={box}><h2 className="text-xl font-semibold">Investimentos conectados</h2><p className="mt-1 text-sm text-slate-500">Posições recebidas pela Pluggy. Consulte novos dados na aba Conexões.</p><p className="mt-4 text-sm">Valor atual dos investimentos</p><div className="mt-1 text-3xl font-semibold"><ConnectedInvestmentValue summary={summary} /></div><p className="mt-3 text-xs text-slate-500">Última leitura local: {date(summary.lastReadAt)}. Essa data não é a atualização do banco. O período das movimentações não filtra posições.</p>
     {summary.status !== 'ready' && <p role="status" className="mt-3">{messages[summary.status]}</p>}
@@ -66,6 +77,36 @@ export function ConnectedInvestments({ summary, transactions = [], categories = 
                   </PieChart>
                 </ResponsiveContainer>
               </div>
+              {selectedCashFlowMonth ? (
+                <div className="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h4 className="font-medium">Movimentações de {selectedCashFlowMonth.split('-').reverse().join('/')}</h4>
+                    <button type="button" onClick={() => setSelectedCashFlowMonth('')} className="text-xs text-slate-500 underline">Fechar</button>
+                  </div>
+                  {selectedCashFlowTransactions.length ? (
+                    <div className="space-y-2">
+                      {selectedCashFlowTransactions.map((transaction) => {
+                        const isRedemption = transaction.type === 'income' || /\bresgate\b/.test(transaction.description.toLowerCase());
+                        const cents = typeof transaction.amountCents === 'number' ? transaction.amountCents : Math.round(Math.abs(transaction.amount) * 100);
+                        return (
+                          <div key={transaction.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-950">
+                            <div className="min-w-0">
+                              <p className="truncate text-slate-700 dark:text-slate-200">{transaction.description}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{transaction.date.split('-').reverse().join('/')}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-semibold ${isRedemption ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                {isRedemption ? '-' : '+'}{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100)}
+                              </p>
+                              <p className="text-xs text-slate-500">{isRedemption ? 'Resgate' : 'Aporte'}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : <p className="text-sm text-slate-500">Nenhuma movimentação neste mês.</p>}
+                </div>
+              ) : null}
               <div className="grid gap-2 sm:grid-cols-2">
                 {areaData.map((item) => (
                   <div key={item.name} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-950">
@@ -86,7 +127,15 @@ export function ConnectedInvestments({ summary, transactions = [], categories = 
           {cashFlow.length ? (
             <div className="mt-4 h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={cashFlow} barGap={6}>
+                <BarChart
+                  data={cashFlow}
+                  barGap={6}
+                  onClick={(event) => {
+                    const sortKey = (event?.activePayload?.[0]?.payload as { sortKey?: string } | undefined)?.sortKey;
+                    if (sortKey) setSelectedCashFlowMonth(sortKey);
+                  }}
+                  className="cursor-pointer"
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.18)" />
                   <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
                   <YAxis tickLine={false} axisLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />

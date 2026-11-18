@@ -25,7 +25,8 @@ test('Painel explica configuração sem pedir senha e não depende de PDF', asyn
     assert.match(app, /role="tablist"/);
     assert.match(app, /Conexões/);
     assert.match(app, /Resultado do período/);
-    assert.match(app, /Histórico importado/);
+    assert.doesNotMatch(app, /Histórico importado|Importar extrato|Carteira manual|Restaurar backup|Limpar transações|type="file"/);
+    assert.doesNotMatch(app, /Fonte dos dados/);
     const { TransactionTable } = await vite.ssrLoadModule('/src/components/TransactionTable.tsx');
     const table = renderToStaticMarkup(createElement(TransactionTable, {
       transactions: [{ id: 'pluggy:synthetic', date: '2026-11-08', description: 'Compra sintética', amount: 10, type: 'expense', categoryId: 'uncategorized', source: 'pluggy', providerStatus: 'PENDING', bankName: 'Banco de teste', createdAt: '2026-11-08' }, { id: 'pluggy:usd', date: '2026-11-08', description: 'Operação em dólar', amount: 15, type: 'expense', categoryId: 'uncategorized', source: 'pluggy', providerStatus: 'POSTED', currencyCode: 'USD', bankName: 'Banco de teste', createdAt: '2026-11-08' }],

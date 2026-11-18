@@ -8,13 +8,15 @@ Pedido de Sara em 17/11/2026, branch `feat/meu-pluggy-sync`. Reorganizar a inter
 - R2. Visão Geral mostra indicadores, gráficos e transações sem o bloco bancário extenso. Apenas um resumo compacto das conexões (quantidade, última leitura, erros) com acesso a Conexões. Mensagens deixam de citar “painel acima”.
 - R3. Conexões concentra instruções, registro de itemId, status/consentimento/última leitura/erros, sincronização por conexão, reconferência completa, backup bancário, saldos por conta, faturas e diagnóstico dos investimentos (com acesso à aba Investimentos). Detalhes técnicos em áreas expansíveis.
 - R4. Aviso “Dados compartilhados no PC” compacto quando normal; erro, rascunho pendente e primeira cópia continuam com o painel completo.
-- R5. Investimentos tem duas visões explícitas: **Conectados** (padrão) e **Carteira manual** (componente existente intacto). Sem soma automática entre elas e sem converter posições conectadas em ativos manuais.
+- R5. Preferência posterior de Sara: Investimentos mostra somente posições conectadas. Remover a visão Carteira manual e seus cadastros/operações da interface, preservando os registros anteriores sem soma, conversão ou exclusão.
 - R6. Conectados usa somente `banking.snapshot.products.investments` e `connections[].productStates.investments`, por um seletor de domínio puro (`src/domain/connectedInvestments.ts`). Resumo do valor atual elegível, distribuição por instituição e classe, lista com identificação/instituição/classe/situação/valor atual/data de referência, filtros por instituição/classe/situação, histórico de resgatados acessível por filtro, origem e última leitura visíveis.
 - R7. Estados: carregando, erro de leitura local, sem conexões, não consultado, vazio, erro/indisponível por conexão (cobertura parcial) e leitura antiga (> 48 h). Ausência de dado não vira zero.
-- R8. Card da Visão Geral no modo “Bancos conectados” passa a “Valor atual dos investimentos”, calculado pelo mesmo seletor da aba Investimentos, com origem e cobertura parcial explícitas. No modo “Histórico importado” mantém o indicador da carteira manual, rotulado como tal. O filtro de período das transações não afeta o patrimônio atual.
+- R8. Visão Geral usa exclusivamente bancos conectados, sem seletor Histórico importado. Card “Valor atual dos investimentos” usa o mesmo seletor da aba Investimentos, com origem e cobertura parcial explícitas. O filtro de período das transações não afeta o patrimônio atual.
 - R9. Estado bancário mantido no `useBanking` do App: trocar de aba não recria conexões nem dispara leitura externa.
 
 - R10. Preferência reforçada por Sara: aplicações e reservas reconhecidas como investimento não entram nas saídas, gráficos de gastos ou Top 5. Movimentações continuam no histórico com rótulo próprio e filtro Investimentos, fora dos filtros Saídas/Entradas. Descritores bancários de aporte na carteira/cofrinho e dinheiro reservado/cofrinho são alocação patrimonial; isso não cria posições conectadas nem ordens manuais. Categorias explícitas e proventos mantêm prioridade.
+
+- R11. Retirar importação de extratos (PDF/CSV/Excel/OFX), restauração/cópia de arquivos e limpeza de histórico/carteira do fluxo principal. Não carregar a carteira manual no App. Manter bancos, filtros, temas, categorias/regras e correções de registros conectados. Backup bancário e recuperação de rascunhos em caso de falha continuam disponíveis. Primeira inicialização de preferências é explícita e não copia dados antigos.
 
 ## Critérios de aceite
 
@@ -31,7 +33,7 @@ Pedido de Sara em 17/11/2026, branch `feat/meu-pluggy-sync`. Reorganizar a inter
 | A9 | Card e resumo conectado usam o mesmo cálculo | harness do App |
 | A10 | Falha/indisponível/não consultado sinaliza cobertura parcial | testes de domínio/SSR |
 | A11 | Carregando não mostra R$ 0,00 definitivo | harness/SSR |
-| A12 | Carteira manual intacta; nenhum segredo no build/logs/docs | suíte existente + varredura |
+| A12 | Dados antigos preservados, sem controles de importação/carteira manual; nenhum segredo no build/logs/docs | regressões de preservação/ausência de controles + varredura |
 
 ## Fora de escopo
 
@@ -45,3 +47,8 @@ Cotações, B3, movimentos/ordens de investimentos, rentabilidade calculada, pre
 - A6 conferido com fixtures de item sem contas e renderização SSR somente leitura do cache real, junto da coerência de card/resumo e preservação do documento manual.
 - `npm test`: 175 testes/zero falhas/skips. Build aprovado. Logs técnicos ignorados em `.evidence/pg-004-2026-11-17/`.
 - Aceite no navegador, 390 px, temas, console e nova sincronização real repetida permanecem pendentes; o controle do navegador ficou indisponível. Não confundir SSR/API/build com a interface interativa validada.
+
+
+## Mudança posterior de escopo — somente bancos conectados
+
+Sara deixou de usar entradas manuais. A interface e os testes do App passam a exigir apenas dados bancários; os testes históricos de restauração foram adaptados para `FinanceState` + SQLite, preservando validação integral/rejeição atômica e compatibilidade dos documentos sem depender de um botão removido. Isso substitui o requisito anterior de oferecer carteira manual/histórico importado na interface. Módulos de compatibilidade e dados salvos não são apagados.

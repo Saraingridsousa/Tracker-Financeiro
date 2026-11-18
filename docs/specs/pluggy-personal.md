@@ -57,3 +57,8 @@ Termos reconfirmados nas fontes oficiais em 12/11/2026: uso pessoal gratuito at�
 - PG-A10: 2/3/6/12 meses civis incluindo referência, início inclusivo e fim exclusivo no primeiro dia do mês seguinte. Ano não inclui 13 meses. Relógio bancário local e maior data histórica são contratos separados. Invalidação na virada ocorre no próximo render, sem timer. Mantém-se a data civil/prefixo UTC informado, sem conversão indiscriminada de fuso.
 
 Vereditos atuais, comandos, revisão e riscos residuais estão exclusivamente em `../STATUS.md`. A disponibilidade real de histórico e cobertura continua `blocked`, sob responsabilidade de Sara. Alertas de dependências são documentados, sem alegar auditoria completa ou ausência de vulnerabilidades.
+
+
+## Preferência posterior — interface só de bancos conectados
+
+Sara retirou o uso de importações/carteira manual em 17/11/2026. PG-004/ADR 005 passam a reger a interface: somente dados bancários, sem upload/restauração ou seletor de histórico importado. A preservação/compatibilidade de dados e backups anteriores permanece coberta no domínio e SQLite; isso não exige expor novamente controles manuais.

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { summarizeConnectedInvestments } from '../src/domain/connectedInvestments.ts';
 
-test('connected view explains coverage, optional amounts and manual separation', async () => {
+test('connected view explains coverage and optional amounts without manual controls', async () => {
  const vite = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true, include: [] }, plugins: [react()], server: { middlewareMode: true, hmr: false, ws: false, watch: { ignored: ['**/*'] } } });
  try {
   const { ConnectedInvestments } = await vite.ssrLoadModule('/src/components/ConnectedInvestments.tsx');
@@ -18,7 +18,7 @@ test('connected view explains coverage, optional amounts and manual separation',
   assert.match(html, /Posição sintética/);
   assert.match(html, /último valor conhecido/);
   assert.match(html, /não informado/);
-  assert.match(html, /Carteira manual/);
+  assert.doesNotMatch(html, /Carteira manual/);
   assert.match(html, /apelido/);
   for (const [state, text] of [['loading', 'Carregando'], ['noConnections', 'Nenhuma conexão'], ['notQueried', 'ainda não consultados'], ['loadError', 'Falha na leitura local']]) {
    const empty = renderToStaticMarkup(createElement(ConnectedInvestments, { summary: { ...summary, status: state, primary: null, positions: [] } }));
