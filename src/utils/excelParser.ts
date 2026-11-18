@@ -1,23 +1,13 @@
 import * as XLSX from 'xlsx';
 
 import type { Transaction } from '../types/finance';
+import { MoneyParseError, parseMoney } from '../lib/parseMoney.ts';
 
 const normalizeText = (value: unknown): string =>
   String(value ?? '')
     .replace(/\s+/g, ' ')
     .replace(/\u00a0/g, ' ')
     .trim();
-
-const normalizeBRNumber = (input: unknown): number => {
-  const raw = normalizeText(input)
-    .replace(/[^0-9,.-]/g, '')
-    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.');
-
-  const parsed = Number.parseFloat(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
 
 const excelSerialToDate = (value: number): string | null => {
   if (!Number.isFinite(value)) return null;
@@ -130,24 +120,14 @@ const resolveAmount = (row: unknown[], mapping: Record<string, number>) => {
 
   for (const key of directCandidates) {
     const idx = mapping[key];
-    if (idx !== undefined) {
+    if (idx !== undefined && idx >= 0) {
       const value = row[idx];
-      const numeric = normalizeBRNumber(value);
-      if (numeric !== 0) return numeric;
+      return parseMoney(value, 'br');
     }
   }
 
-  const possible = row.filter((cell, idx) => {
-    if (idx === mapping.data || idx === mapping.descricao || idx === mapping.descrição || idx === mapping.historico || idx === mapping.histórico || idx === mapping.detalhes || idx === mapping.lancamento || idx === mapping.lançamento) {
-      return false;
-    }
-    const text = normalizeText(cell);
-    return /(?:r\$|\d)/i.test(text) && !/saldo|total|media/i.test(text.toLowerCase());
-  });
-
-  if (!possible.length) return 0;
-
-  return normalizeBRNumber(possible[0]);
+  // A document number or balance must never be guessed to be a transaction amount.
+  throw new MoneyParseError('coluna de valor ausente ou ambígua.');
 };
 
 const detectBankFromText = (text: string): Transaction['bank'] => {
@@ -225,8 +205,13 @@ export const parseExcelStatement = async (file: File): Promise<Transaction[]> =>
       const description = getDescription(row, mapping).replace(/\s+/g, ' ').trim();
       if (!description || /saldo|total|lancamento|historico|descrição|descricao/.test(description.toLowerCase()) && description.length < 20) continue;
 
-      const amount = resolveAmount(row, mapping);
-      if (!amount) continue;
+      let amount: number;
+      try {
+        amount = resolveAmount(row, mapping);
+      } catch (error) {
+        if (error instanceof MoneyParseError) throw new MoneyParseError(`${file.name}, linha ${index + 1}: ${error.message}`);
+        throw error;
+      }
 
       const typeValue = mapping.tipo !== undefined ? normalizeText(row[mapping.tipo]).toLowerCase() : '';
       let finalAmount = amount;
@@ -269,6 +254,7 @@ export const parseExcelStatement = async (file: File): Promise<Transaction[]> =>
 
     return imported;
   } catch (error) {
+    if (error instanceof MoneyParseError) throw error;
     console.error('Erro ao ler planilha Excel:', error);
     throw new Error('Não foi possível ler esta planilha. Verifique se o arquivo é um Excel válido (.XLSX ou .XLS).');
   }

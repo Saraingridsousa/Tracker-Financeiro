@@ -2,21 +2,13 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 import type { Transaction } from '../types/finance';
+import { MoneyParseError, parseMoney } from '../lib/parseMoney.ts';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 const normalizeText = (value: string) => value.replace(/\s+/g, ' ').trim();
 
-const normalizeBRNumber = (input: string): number => {
-  const cleaned = String(input)
-    .replace(/[^0-9,.-]/g, '')
-    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.');
-
-  const parsed = Number.parseFloat(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
+const normalizeBRNumber = (input: string): number => parseMoney(input, 'br');
 
 const parseDateToken = (raw: string): string | null => {
   const text = raw.trim();
@@ -138,10 +130,14 @@ const detectTransaction = (
   const afterDate = normalized.slice(dateMatch[0].length).trim();
   if (!afterDate) return null;
 
-  const valueMatch = afterDate.match(/(?:R\$\s*)?-?\d{1,3}(?:\.\d{3})*,\d{2}/i);
-  if (!valueMatch) return null;
+  // Capture the complete numeric token; never accept the tail of 1234,56 or 1..234,56.
+  const valueMatch = afterDate.match(/(?<![\w.,+-])(?:[+-]?R\$\s*)?[+-]?\d[\d.,]*(?:[ \u00a0\u202f]\d{3})*[.,]\d+(?![\w.,])/i);
+  if (!valueMatch) {
+    if (/R\$/i.test(afterDate)) throw new MoneyParseError('valor ausente ou malformado no PDF.');
+    return null;
+  }
 
-  const amountRaw = valueMatch[0].replace(/R\$/gi, '').replace(/\s+/g, '').trim();
+  const amountRaw = valueMatch[0];
   const amountValue = normalizeBRNumber(amountRaw);
 
   const indicatorText = afterDate.slice(0, afterDate.indexOf(valueMatch[0]) + valueMatch[0].length).toUpperCase();
@@ -238,7 +234,7 @@ export const parsePDFStatement = async (file: File): Promise<Transaction[]> => {
         return;
       }
 
-      const caixaMatch = normalized.match(/(\d{2}\/\d{2}\/\d{4})[^\s]*\s+(\d+)\s+(.*?)\s+([\d\.]+,\d{2})\s+([CD])/i);
+      const caixaMatch = normalized.match(/(\d{2}\/\d{2}\/\d{4})[^\s]*\s+(\d+)\s+(.*?)\s+([+-]?[\d.,]+)\s+([CD])\b/i);
       if (caixaMatch) {
         const [, dateText, , description, valueText, flag] = caixaMatch;
         if (/saldo dia|saldo anterior/i.test(normalized)) return;
@@ -262,7 +258,8 @@ export const parsePDFStatement = async (file: File): Promise<Transaction[]> => {
 
       const interPattern = /(pagamento efetuado|pix recebido|pix enviado|credito evento b3|debito online td|aplicacao|resgate|debito|recebimento de transferencia|envio de transferencia|pagamento de fatura)/i;
       if (currentDate && interPattern.test(normalized) && !/(saldo do dia|saldo total|saldo disponivel|saldo disponível|fale com a gente)/i.test(normalized)) {
-        const moneyMatch = normalized.match(/(-?R\$\s*[\d\.,]+)/i);
+        const moneyMatch = normalized.match(/([+-]?R\$\s*[+-]?\d[\d.,]*(?:[ \u00a0\u202f]\d{3})*(?:[.,]\d+)?)(?![\w.,])/i);
+        if (!moneyMatch && /R\$/i.test(normalized)) throw new MoneyParseError('valor ausente ou malformado no PDF.');
         if (moneyMatch) {
           const parsedMoney = normalizeBRNumber(moneyMatch[1]);
           const amount = moneyMatch[1].includes('-') ? -Math.abs(parsedMoney) : Math.abs(parsedMoney);
@@ -309,6 +306,7 @@ export const parsePDFStatement = async (file: File): Promise<Transaction[]> => {
 
     return transactions;
   } catch (error) {
+    if (error instanceof MoneyParseError) throw error;
     console.error('Erro ao ler PDF:', error);
     throw new Error('Não foi possível ler este PDF. Verifique se o arquivo é um extrato bancário válido.');
   }

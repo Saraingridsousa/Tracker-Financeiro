@@ -1,5 +1,16 @@
 # Estado — Tracker Financeiro / Meu Pluggy
 
+## Conversão monetária de extratos — 18/11/2026
+
+Correção solicitada por Sara em `feat/meu-pluggy-sync`. Confirmado o defeito de `safeNumber`: `85.50` era convertido para `8550`, e valores inválidos viravam zero. Conversão estrita compartilhada, contexto explícito para ambiguidades e leitura própria de OFX SGML/XML; Excel preserva células numéricas e PDF valida tokens completos. Mantidos categorias, neutralidade, confirmação de transferência própria e o modo somente bancos conectados.
+
+TDD nesta branch: regressões de CSV/OFX/Excel e PDF real executadas antes da alteração de produção, com falhas demonstradas; após a correção, **302 testes, zero falhas/skips**, `npm test` exit 0, e **build/TypeScript app/node aprovados**, `npm run build` exit 0. Logs sintéticos ignorados em `.evidence/monetary-parsing/tests.log` e `build.log`. Permanecem avisos conhecidos de SQLite experimental, scanner Vite em harnesses antigos e bundle >500 kB; o teste de PDF pode avisar sobre fontes padrão, sem impedir extração dos valores.
+
+Apresentação BRL validada com React SSR da tabela real para CSV, XLS/XLSX e PDF e totais no domínio existente. Não se afirma importação interativa na interface conectada, que não possui upload por decisão anterior. Nenhuma sincronização externa ou alteração de dados/configuração bancária real. Sem dependências novas, push ou publicação.
+
+Investigação, arquivos, regras e riscos restantes em [monetary-imports.md](monetary-imports.md). O conversor e testes unitários foram commitados em `3faf9d8`; a integração dos importadores e suas regressões forma a etapa seguinte. O rascunho iniciado no checkout principal foi preservado separadamente, sem incorporar seu Vitest ou mudanças de dependências nesta branch.
+
+
 ## Investimentos fora das saídas — 17/11/2026
 
 Sara reforçou que investimentos não devem contar como saída. A política existente já excluía investimentos reconhecidos dos totais, mas a tabela ainda os rotulava/filtrava como Saída. A conferência local somente leitura também encontrou descritores de aporte/reserva em cofrinho sem classificação. Corrigidos ambos os caminhos:

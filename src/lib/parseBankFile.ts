@@ -1,20 +1,9 @@
 import Papa, { type ParseResult } from 'papaparse';
 
 import type { Transaction, TransactionType } from '../types/finance';
+import { parseMoney, type MoneyFormat } from './parseMoney.ts';
 
 const normalizeText = (value: string) => value?.trim().toLowerCase() ?? '';
-
-const safeNumber = (value: string | number | undefined): number => {
-  if (value === null || value === undefined || value === '') return 0;
-
-  const cleaned = String(value)
-    .replace(/[^0-9,.-]/g, '')
-    .replace('.', '')
-    .replace(',', '.');
-
-  const parsed = Number.parseFloat(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
 
 const parseDate = (value: string | undefined): string => {
   if (!value) return new Date().toISOString().slice(0, 10);
@@ -53,23 +42,7 @@ const parseDate = (value: string | undefined): string => {
   return new Date().toISOString().slice(0, 10);
 };
 
-const inferType = (amount: number, raw: Record<string, string>): TransactionType => {
-  const text = Object.values(raw)
-    .join(' ')
-    .toLowerCase();
-
-  if (text.includes('credit') || text.includes('credito') || text.includes('deposit') || text.includes('salary') || text.includes('salario')) {
-    return 'income';
-  }
-
-  if (text.includes('debit') || text.includes('debito') || text.includes('expense') || text.includes('despesa')) {
-    return 'expense';
-  }
-
-  return amount >= 0 ? 'income' : 'expense';
-};
-
-const findValueField = (row: Record<string, string>): { amount: number; type: TransactionType } => {
+const findValueField = (row: Record<string, string>, format: MoneyFormat): { amount: number; type: TransactionType } => {
   const candidates = [
     'amount',
     'valor',
@@ -85,15 +58,15 @@ const findValueField = (row: Record<string, string>): { amount: number; type: Tr
   for (const key of candidates) {
     const value = row[key];
     if (value !== undefined && value !== null && String(value).trim() !== '') {
-      const numeric = safeNumber(value);
+      const numeric = parseMoney(value, format);
       return {
         amount: Math.abs(numeric),
-        type: numeric >= 0 ? 'income' : 'expense',
+        type: key === 'debit' ? 'expense' : numeric >= 0 ? 'income' : 'expense',
       };
     }
   }
 
-  return { amount: 0, type: 'expense' };
+  throw new Error('Valor monetário ausente na transação.');
 };
 
 const findDateField = (row: Record<string, string>): string => {
@@ -166,12 +139,12 @@ const detectBankFromText = (text: string): Transaction['bank'] => {
   return 'Outro';
 };
 
-const createTransaction = (row: Record<string, string>, index: number, fileName: string): Transaction | null => {
+const createTransaction = (row: Record<string, string>, index: number, fileName: string, format: MoneyFormat): Transaction | null => {
   const date = findDateField(row);
   const description = findDescriptionField(row);
-  const { amount, type } = findValueField(row);
+  const { amount, type } = findValueField(row, format);
 
-  if (!amount || !description) return null;
+  if (!description) return null;
 
   const normalizedDate = parseDate(date);
   const id = `${normalizedDate}-${description}-${index}-${Math.abs(amount).toFixed(2)}`;
@@ -209,7 +182,7 @@ const parseInterCreditCardCsv = (text: string): Record<string, string>[] => {
   });
 
   if (result.errors.length) {
-    console.warn('Inter credit card CSV parse warnings:', result.errors);
+    throw new Error(`CSV Inter malformado: ${result.errors[0].message}`);
   }
 
   return result.data
@@ -237,7 +210,7 @@ const parseCsv = (text: string): Record<string, string>[] => {
   });
 
   if (result.errors.length) {
-    console.warn('CSV parse warnings:', result.errors);
+    throw new Error(`CSV malformado: ${result.errors[0].message}`);
   }
 
   return result.data.filter((row: Record<string, string>) =>
@@ -246,50 +219,23 @@ const parseCsv = (text: string): Record<string, string>[] => {
 };
 
 const parseOfx = (text: string): Record<string, string>[] => {
-  const lines = text
-    .replace(/<\?ofx.*?\?>/gi, '')
-    .replace(/<.*?>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(/\s+/);
-
-  const transactions: Record<string, string>[] = [];
-  const entries: Record<string, string> = {};
-
-  for (const line of lines) {
-    if (!line) continue;
-
-    if (line.toLowerCase().includes('trntype')) {
-      const key = 'type';
-      const value = line.split('=')[1] || '';
-      entries[key] = value;
-    }
-
-    if (line.toLowerCase().includes('dtposted')) {
-      const key = 'date';
-      const value = line.split('=')[1] || '';
-      entries[key] = value;
-    }
-
-    if (line.toLowerCase().includes('name')) {
-      const key = 'description';
-      const value = line.split('=')[1] || '';
-      entries[key] = value;
-    }
-
-    if (line.toLowerCase().includes('trnamt')) {
-      const key = 'amount';
-      const value = line.split('=')[1] || '';
-      entries[key] = value;
-    }
-
-    if (Object.keys(entries).length >= 4) {
-      transactions.push({ ...entries });
-      Object.keys(entries).forEach((key) => delete entries[key]);
-    }
+  if (!/<OFX[>\s]/i.test(text)) throw new Error('Arquivo OFX inválido.');
+  const blocks = [...text.matchAll(/<STMTTRN\s*>([\s\S]*?)<\/STMTTRN\s*>/gi)];
+  if (blocks.length !== (text.match(/<STMTTRN\s*>/gi) ?? []).length) {
+    throw new Error('OFX contém transação incompleta.');
   }
-
-  return transactions.filter((item) => item.amount || item.description || item.date);
+  return blocks.map(([, block], index) => {
+    // Both OFX 1 SGML (unclosed leaves) and OFX 2 XML use these aggregate tags.
+    const field = (tag: string) => block.match(new RegExp('<' + tag + '>([^<]*)', 'i'))?.[1].trim() ?? '';
+    const date = field('DTPOSTED');
+    if (!/^\d{8}/.test(date)) throw new Error('Data OFX inválida na transação ' + (index + 1));
+    return {
+      date: date.slice(0, 4) + '-' + date.slice(4, 6) + '-' + date.slice(6, 8),
+      description: (field('MEMO') || field('NAME')).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'),
+      amount: field('TRNAMT'),
+      type: field('TRNTYPE'),
+    };
+  });
 };
 
 const prettifyCategoryName = (input?: string) => {
@@ -326,8 +272,8 @@ const createInterCreditCardTransaction = (row: Record<string, string>, index: nu
   const description = cleanDescription(
     row.lancamento ?? row['lançamento'] ?? row.descricao ?? row['descrição'] ?? row.historico ?? row['histórico'] ?? row.description ?? row.memo ?? 'Transação sem descrição',
   );
-  const rawValue = row.valor ?? row.value ?? row.amount ?? '0';
-  const numericValue = safeNumber(rawValue);
+  const rawValue = row.valor ?? row.value ?? row.amount;
+  const numericValue = parseMoney(rawValue, 'br');
   const categoryLabel = prettifyCategoryName(row.categoria ?? row.category);
 
   if (!description || !Number.isFinite(numericValue)) return null;
@@ -361,16 +307,25 @@ const createInterCreditCardTransaction = (row: Record<string, string>, index: nu
   return transaction;
 };
 
-export const parseBankFile = async (file: File): Promise<Transaction[]> => {
+export const parseBankFile = async (
+  file: File,
+  options: { amountFormat?: 'auto' | 'br' | 'international' } = {},
+): Promise<Transaction[]> => {
   const name = file.name.toLowerCase();
+  if (!/\.(csv|ofx)$/.test(name)) throw new Error('Formato não suportado: use CSV ou OFX.');
   const text = await file.text();
-
   const isInterInvoiceCsv = name.includes('inter-from-') && name.endsWith('.csv');
   const rows = isInterInvoiceCsv ? parseInterCreditCardCsv(text) : name.endsWith('.csv') ? parseCsv(text) : parseOfx(text);
+  const format = name.endsWith('.ofx') ? 'ofx' : options.amountFormat ?? 'auto';
 
-  const transactions = rows
-    .map((row, index) => (isInterInvoiceCsv ? createInterCreditCardTransaction(row, index) : createTransaction(row, index, file.name)))
-    .filter((item): item is Transaction => Boolean(item));
-
-  return transactions;
+  return rows.map((row, index) => {
+    try {
+      return isInterInvoiceCsv
+        ? createInterCreditCardTransaction(row, index)
+        : createTransaction(row, index, file.name, format);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Valor inválido.';
+      throw new Error(file.name + ' — transação ' + (index + 1) + ': ' + reason);
+    }
+  }).filter((item): item is Transaction => Boolean(item));
 };
