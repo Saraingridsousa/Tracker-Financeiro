@@ -116,3 +116,20 @@ test('Categoria neutra e marcações explícitas de transferência/fatura contin
     assert.equal(classifyTransaction(tx, policies).isNeutral, true);
   }
 });
+
+
+test('bank cofrinho contributions and reserved money are allocations, never spending', () => {
+  for (const description of ['APORTE NA CARTEIRA COFRINHO SINTÉTICO', 'Dinheiro reservado - Cofrinho do cartão sintético']) {
+    const tx = { ...base, description, categoryId: 'uncategorized', amount: 100 };
+    const classified = classifyTransaction(tx, healthCategories);
+    assert.equal(classified.isInvestment, true, description);
+    assert.equal(finance.isRealExpense(tx, healthCategories), false);
+    assert.equal(finance.summarizeTransactions([tx], healthCategories).expenses, 0);
+    assert.equal(finance.summarizeTransactions([tx], healthCategories).neutralTotal, 100);
+    // Explicit user correction still takes priority over description inference.
+    assert.equal(classifyTransaction({ ...tx, categoryId: 'saude', manualCategory: true }, healthCategories).isInvestment, false);
+  }
+  const retail = { ...base, description: 'Compra de cofrinho decorativo', categoryId: 'uncategorized' };
+  assert.equal(classifyTransaction(retail, healthCategories).isInvestment, false);
+  assert.equal(finance.isRealExpense(retail, healthCategories), true);
+});

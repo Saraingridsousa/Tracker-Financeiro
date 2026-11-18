@@ -1,5 +1,16 @@
 # Estado — Tracker Financeiro / Meu Pluggy
 
+## Investimentos fora das saídas — 17/11/2026
+
+Sara reforçou que investimentos não devem contar como saída. A política existente já excluía investimentos reconhecidos dos totais, mas a tabela ainda os rotulava/filtrava como Saída. A conferência local somente leitura também encontrou descritores de aporte/reserva em cofrinho sem classificação. Corrigidos ambos os caminhos:
+
+- `finance.ts` reconhece os descritores bancários de aporte na carteira e dinheiro reservado quando acompanhados de cofrinho, sem tornar qualquer compra de cofrinho uma alocação. Categorias específicas, correções manuais e proventos mantêm precedência.
+- `TransactionTable` usa a mesma classificação do dashboard, mostra “Investimento · fora dos gastos” em cor própria e oferece filtro Investimentos. Aplicações/resgates não entram nos filtros Saídas/Entradas, nem no Top 5. Sinal, valores e sentido bancário originais são preservados.
+- Nenhuma posição, ordem manual ou correção financeira foi criada a partir de descrição. Cache bancário e documento manual permaneceram idênticos antes/depois da conferência por GET.
+
+TDD: teste de rótulo/filtro e teste dos descritores falharam antes das correções e passaram depois. **178 testes, zero falhas/skips**, suíte completa e build aprovados (exit 0); log do build registrado em `.evidence/pg-004-2026-11-17/outflows-build-final.log`. Mapa local Graphify atualizado por AST, sem LLM externo. O aceite visual continua pendente pelos bloqueios de controle descritos na seção PG-004. Não houve nova tentativa de automação nesta correção, push, sync externo ou mutação da base real.
+
+
 ## PG-004 — abas e investimentos conectados — 17/11/2026
 
 Implementação retomada do Antigravity a partir de `42ecb88`, preservando o teste de domínio não commitado. Esse marco continha a especificação/ADR, mas ainda não o seletor nem a reorganização da interface. Trabalho feito somente em `Tracker-Financeiro-pluggy`, branch `feat/meu-pluggy-sync`.

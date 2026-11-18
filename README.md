@@ -59,7 +59,7 @@ Fontes oficiais: [guia pessoal](https://docs.pluggy.ai/en/docs/guides/meu-pluggy
 - **Investimentos** abre nos conectados da Pluggy, com filtros e histórico de resgatados. Instituições sem contas bancárias também aparecem. A **Carteira manual** continua separada e suas edições não alteram investimentos no banco.
 - **Conexões** reúne configuração, sincronização, reconferência, consentimentos, backup bancário, saldos e faturas. Trocar de aba não sincroniza o provedor.
 
-Valores de moedas diferentes ficam separados. Cobertura parcial, leitura antiga e situações desconhecidas são sinalizadas; valores preservados em falhas são o último valor conhecido. Detalhes da política e aceite em [PG-004](docs/specs/pg-004-abas-investimentos-conectados.md) e [ADR 005](docs/decisions/005-investimentos-conectados.md).
+Aplicações e reservas reconhecidas como investimento ficam fora dos gastos; na tabela, aparecem como **Investimento · fora dos gastos**, com filtro próprio, mantendo o histórico e o sentido bancário original. Valores de moedas diferentes ficam separados. Cobertura parcial, leitura antiga e situações desconhecidas são sinalizadas; valores preservados em falhas são o último valor conhecido. Detalhes da política e aceite em [PG-004](docs/specs/pg-004-abas-investimentos-conectados.md) e [ADR 005](docs/decisions/005-investimentos-conectados.md).
 
 ## Como interpretar o painel
 

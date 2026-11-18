@@ -23,6 +23,8 @@
 11. **Abas**: estado bancário fica no `useBanking` do App; abas são renderização condicional sem efeitos de rede. Conteúdo da Visão Geral permanece no App (testes existentes inspecionam a árvore); novas áreas são componentes pequenos.
 
 
+12. **Investimento não é gasto.** A classificação financeira compartilhada exclui aplicações/resgates do resultado de consumo. A tabela usa essa classificação para rótulo e filtros, sem modificar o sentido bancário original do lançamento. Descritores iniciados por `aporte na carteira` ou `dinheiro reservado`, seguidos de `cofrinho`, são alocações neutras quando não há categoria específica. A palavra cofrinho isolada não é suficiente; uma compra comum continua despesa. Correção manual e categoria específica prevalecem. Não inferir posição atual a partir dessa classificação.
+
 ## Implementação e evidência
 
 Fonte oficial reconferida: [Investments — Pluggy](https://docs.pluggy.ai/en/docs/products/investments). `ConnectedInvestmentValue` é compartilhado pelo card e pelo resumo; o App fornece o mesmo seletor, sem filtro mensal. Os testes `connectedInvestments.test.ts`, `connected-investments-ui.test.mjs` e `main-tabs.test.mjs` cobrem política, SSR, navegação e recuperação. A matriz de evidência e os limites do navegador estão em `docs/STATUS.md`.

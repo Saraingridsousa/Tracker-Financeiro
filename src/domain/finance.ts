@@ -26,7 +26,9 @@ export function classifyTransaction(transaction: Transaction, categories: Catego
   // Category inference already applies rules before keywords; a specific known
   // category (including a manual correction) must outrank this weaker text hint.
   const hasSpecificCategory = Boolean(category && category.id !== 'uncategorized');
-  const isInvestment = transaction.categoryId === 'investimentos' || (!hasSpecificCategory && transaction.categoryId !== 'proventos' && /\b(cdb|lci|tesouro|selic|aplicacao|resgate|investimento)\b/.test(text));
+  // Bank allocation descriptors, not any purchase mentioning a physical cofrinho.
+  const isCofrinhoAllocation = /^(?:aporte na carteira|dinheiro reservado)\b.*\bcofrinho\b/.test(text);
+  const isInvestment = transaction.categoryId === 'investimentos' || (!hasSpecificCategory && transaction.categoryId !== 'proventos' && (isCofrinhoAllocation || /\b(cdb|lci|tesouro|selic|aplicacao|resgate|investimento)\b/.test(text)));
   return {
     ...transaction,
     isSelfTransfer,

@@ -2,7 +2,7 @@ import { Trash2 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 
 import type { Category, Transaction } from '../types/finance';
-import { isRealExpense } from '../domain/finance';
+import { classifyTransaction, isRealExpense } from '../domain/finance';
 
 const formatBrazilianDate = (value: string) => {
   if (!value) return '';
@@ -94,7 +94,7 @@ export function TransactionTable({
 }: TransactionTableProps) {
   const [search, setSearch] = useState('');
   const [selectedBank, setSelectedBank] = useState<string>('all');
-  const [selectedType, setSelectedType] = useState<'all' | 'income' | 'expense'>('all');
+  const [selectedType, setSelectedType] = useState<'all' | 'income' | 'expense' | 'investment'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [page, setPage] = useState(1);
@@ -132,12 +132,12 @@ export function TransactionTable({
   }, [transactions]);
 
   const sortedTransactions = useMemo(() => {
-    const items = sortTransactionsByDateDesc(transactions);
+    const items = sortTransactionsByDateDesc(transactions.map(tx => classifyTransaction(tx, categories)));
     if (sortConfig.field === 'date' && sortConfig.direction === 'asc') {
       return [...items].reverse();
     }
     return items;
-  }, [sortConfig, transactions]);
+  }, [sortConfig, transactions, categories]);
 
   const filteredTransactions = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -146,7 +146,7 @@ export function TransactionTable({
     const filteredList = sortedTransactions.filter((transaction) => {
       const matchesSearch = !term || transaction.description.toLowerCase().includes(term);
       const matchesBank = selectedBank === 'all' || (transaction.bankName ?? transaction.bank ?? 'Outro') === selectedBank;
-      const matchesType = selectedType === 'all' || transaction.type === selectedType;
+      const matchesType = selectedType === 'all' || (selectedType === 'investment' ? transaction.isInvestment : !transaction.isInvestment && transaction.type === selectedType);
       const transactionMonth = getTransactionMonthKey(transaction.date);
       const matchesCategory =
         selectedCategory === 'all' ||
@@ -269,7 +269,7 @@ export function TransactionTable({
               <select
                 value={selectedType}
                 onChange={(event) => {
-                  setSelectedType(event.target.value as 'all' | 'income' | 'expense');
+                  setSelectedType(event.target.value as 'all' | 'income' | 'expense' | 'investment');
                   setPage(1);
                 }}
                 className="h-10 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
@@ -277,6 +277,7 @@ export function TransactionTable({
                 <option value="all">Todos os tipos</option>
                 <option value="income">Entradas</option>
                 <option value="expense">Saídas</option>
+                <option value="investment">Investimentos</option>
               </select>
 
               <select
@@ -340,7 +341,7 @@ export function TransactionTable({
                   {paginatedTransactions.length ? (
                     paginatedTransactions.map((transaction) => {
                       const category = categories.find((item) => item.id === transaction.categoryId) ?? categories[0];
-                      const isNeutral = Boolean(category?.isNeutral || category?.excludeFromTotals);
+                      const isNeutral = Boolean(transaction.isNeutral);
                       const bankStyles: Record<string, string> = {
                         Inter: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/60 dark:text-orange-300',
                         Caixa: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/60 dark:text-blue-300',
@@ -388,7 +389,7 @@ export function TransactionTable({
                                 </span>
                               )}
                               <div className="mt-1 flex flex-wrap items-center gap-2">
-                                <span className="text-xs text-slate-500 dark:text-slate-400">{transaction.type === 'income' ? 'Entrada' : 'Saída'}</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">{transaction.isInvestment ? 'Investimento · fora dos gastos' : transaction.type === 'income' ? 'Entrada' : 'Saída'}</span>
                                 <span
                                   className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${bankStyles[transaction.bankName ?? transaction.bank ?? 'Outro'] ?? bankStyles.Outro}`}
                                 >
@@ -399,7 +400,7 @@ export function TransactionTable({
                                     Fatura Paga (Neutro)
                                   </span>
                                 )}
-                                {isNeutral && !transaction.isCreditCardPayment && (
+                                {isNeutral && !transaction.isCreditCardPayment && !transaction.isInvestment && (
                                   <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/60 dark:text-violet-300">
                                     ⇄ Transferência / Neutro
                                   </span>
@@ -433,7 +434,7 @@ export function TransactionTable({
                               />
                               <span
                                 className={`font-semibold ${
-                                  transaction.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                                  transaction.isInvestment ? 'text-cyan-700 dark:text-cyan-300' : transaction.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                                 }`}
                               >
                                 {transaction.type === 'income' ? '+' : '-'}

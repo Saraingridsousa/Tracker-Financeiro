@@ -14,6 +14,8 @@ Pedido de Sara em 17/11/2026, branch `feat/meu-pluggy-sync`. Reorganizar a inter
 - R8. Card da Visão Geral no modo “Bancos conectados” passa a “Valor atual dos investimentos”, calculado pelo mesmo seletor da aba Investimentos, com origem e cobertura parcial explícitas. No modo “Histórico importado” mantém o indicador da carteira manual, rotulado como tal. O filtro de período das transações não afeta o patrimônio atual.
 - R9. Estado bancário mantido no `useBanking` do App: trocar de aba não recria conexões nem dispara leitura externa.
 
+- R10. Preferência reforçada por Sara: aplicações e reservas reconhecidas como investimento não entram nas saídas, gráficos de gastos ou Top 5. Movimentações continuam no histórico com rótulo próprio e filtro Investimentos, fora dos filtros Saídas/Entradas. Descritores bancários de aporte na carteira/cofrinho e dinheiro reservado/cofrinho são alocação patrimonial; isso não cria posições conectadas nem ordens manuais. Categorias explícitas e proventos mantêm prioridade.
+
 ## Critérios de aceite
 
 | ID | Critério | Verificação |
