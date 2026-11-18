@@ -2,6 +2,48 @@ import type { Category, Rule, Transaction, TransactionType } from '../types/fina
 
 export const normalizeFinanceText = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
+export function inferCreditCardInstallment(tx: Pick<Transaction, 'date' | 'description' | 'amount'> & Pick<Transaction, 'amountCents' | 'creditCardMetadata'>): {
+  installmentNumber: number;
+  totalInstallments: number;
+  purchaseDate: string;
+  totalAmountCents?: number;
+} | null {
+  const metadata = tx.creditCardMetadata;
+  if (Number.isInteger(metadata?.totalInstallments) && (metadata?.totalInstallments ?? 0) > 1) {
+    return {
+      installmentNumber: Number.isInteger(metadata?.installmentNumber) ? (metadata?.installmentNumber as number) : 1,
+      totalInstallments: metadata?.totalInstallments as number,
+      purchaseDate: metadata?.purchaseDate ?? tx.date,
+      ...(Number.isSafeInteger(metadata?.totalAmountCents) ? { totalAmountCents: metadata?.totalAmountCents } : {}),
+    };
+  }
+
+  const rawText = tx.description;
+  const normalizedText = normalizeFinanceText(rawText);
+  const match = rawText.match(/(?:parcela|parcelamento|parcelado)[^0-9]*(\d{1,2})\s*(?:de|\/)\s*(\d{1,2})\b/i) ??
+    rawText.match(/\b(\d{1,2})\s*(?:\/|\bde\b)\s*(\d{1,2})\b/i) ??
+    normalizedText.match(/(?:parcela|parcelamento|parcelado)[^0-9]*(\d{1,2})\s+de\s+(\d{1,2})\b/);
+  if (!match) return null;
+
+  const installmentNumber = Number(match[1]);
+  const totalInstallments = Number(match[2]);
+  if (!Number.isInteger(installmentNumber) || !Number.isInteger(totalInstallments) ||
+    installmentNumber < 1 || totalInstallments < 2 || installmentNumber > totalInstallments) {
+    return null;
+  }
+
+  const amountCents = typeof tx.amountCents === 'number' && Number.isSafeInteger(tx.amountCents)
+    ? tx.amountCents
+    : Math.round((Math.abs(tx.amount) + Number.EPSILON) * 100);
+
+  return {
+    installmentNumber,
+    totalInstallments,
+    purchaseDate: tx.date,
+    totalAmountCents: amountCents * totalInstallments,
+  };
+}
+
 export function inferCategory(description: string, categories: Category[], rules: Rule[] = [], type?: TransactionType): string {
   const text = normalizeFinanceText(description);
   if (type === 'income' && /\b(jose ricardo|jose ricardo de sousa afonso|cofrinho|cofre)\b/.test(text)) {
@@ -53,18 +95,85 @@ export function participatesInResult(tx: Transaction, categories: Category[] = [
 }
 export const isRealExpense = (tx: Transaction, categories: Category[] = []) => tx.type === 'expense' && participatesInResult(tx, categories);
 export const isRealIncome = (tx: Transaction, categories: Category[] = []) => tx.type === 'income' && participatesInResult(tx, categories);
+export const isInvestmentApplication = (tx: Transaction, categories: Category[] = []) => {
+  if (tx.type !== 'expense' || !isSettledBRL(tx)) return false;
+  const text = normalizeFinanceText(tx.description);
+  if (/\bresgate\b/.test(text)) return false;
+  return classifyTransaction(tx, categories).isInvestment;
+};
+
+const validCivilDate = (value: unknown): value is string =>
+  typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+const addMonths = (date: string, months: number): string => {
+  const [year, month, day] = date.split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const targetYear = target.getUTCFullYear();
+  const targetMonth = target.getUTCMonth();
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(Math.min(day || 1, lastDay)).padStart(2, '0')}`;
+};
+
+/** Expands only purchases whose reported amount is the full parcelada purchase.
+ *  If each installment is already reported separately, the amount differs from
+ *  totalAmountCents and no duplicate expansion is made.
+ */
+export function projectInstallmentTransactions(items: Transaction[]): Transaction[] {
+  return items.flatMap((tx) => {
+    if (tx.type !== 'expense') return [tx];
+
+    const metadata = tx.creditCardMetadata;
+    const totalInstallments = metadata?.totalInstallments;
+    const totalAmountCents = metadata?.totalAmountCents;
+    const amountCents = Number.isSafeInteger(tx.amountCents)
+      ? tx.amountCents
+      : Math.round((Math.abs(tx.amount) + Number.EPSILON) * 100);
+
+    if (!metadata ||
+      !Number.isInteger(totalInstallments) ||
+      (totalInstallments ?? 0) < 2 ||
+      !Number.isSafeInteger(totalAmountCents) ||
+      (totalAmountCents ?? 0) <= 0 ||
+      amountCents !== totalAmountCents) {
+      return [tx];
+    }
+
+    const installmentCount = totalInstallments as number;
+    const purchaseAmountCents = totalAmountCents as number;
+    const startDate = validCivilDate(metadata.purchaseDate) ? metadata.purchaseDate : tx.date;
+    if (!validCivilDate(startDate)) return [tx];
+
+    const baseCents = Math.floor(purchaseAmountCents / installmentCount);
+    const remainderCents = purchaseAmountCents - baseCents * installmentCount;
+
+    return Array.from({ length: installmentCount }, (_, index) => ({
+      ...tx,
+      date: addMonths(startDate, index),
+      amount: (baseCents + (index < remainderCents ? 1 : 0)) / 100,
+      amountCents: baseCents + (index < remainderCents ? 1 : 0),
+      creditCardMetadata: {
+        ...metadata,
+        installmentNumber: index + 1,
+      },
+    }));
+  });
+}
 
 export function summarizeTransactions(items: Transaction[], categories: Category[] = []): import('../types/finance').DashboardSummary {
-  const cents = (tx: Transaction) => Math.round((Math.abs(tx.amount) + Number.EPSILON) * 100);
-  const income = items.filter((tx) => isRealIncome(tx, categories)).reduce((sum, tx) => sum + cents(tx), 0);
-  const expenses = items.filter((tx) => isRealExpense(tx, categories)).reduce((sum, tx) => sum + cents(tx), 0);
-  const expenseCount = items.filter((tx) => isRealExpense(tx, categories)).length;
+  const projectedItems = projectInstallmentTransactions(items);
+  const cents = (tx: Transaction): number => {
+    if (typeof tx.amountCents === 'number' && Number.isSafeInteger(tx.amountCents)) return tx.amountCents;
+    return Math.round((Math.abs(tx.amount) + Number.EPSILON) * 100);
+  };
+  const income = projectedItems.filter((tx) => isRealIncome(tx, categories)).reduce((sum, tx) => sum + cents(tx), 0);
+  const expenses = projectedItems.filter((tx) => isRealExpense(tx, categories)).reduce((sum, tx) => sum + cents(tx), 0);
+  const expenseCount = projectedItems.filter((tx) => isRealExpense(tx, categories)).length;
   return {
     balance: (income - expenses) / 100, income: income / 100, expenses: expenses / 100,
     averageExpense: expenseCount ? expenses / 100 / expenseCount : 0,
-    monthCount: new Set(items.map((tx) => tx.date.slice(0, 7))).size,
-    neutralTotal: items.filter((tx) => classifyTransaction(tx, categories).isNeutral && isSettledBRL(tx)).reduce((sum, tx) => sum + cents(tx), 0) / 100,
-    totalInvested: items.filter((tx) => classifyTransaction(tx, categories).isInvestment && isSettledBRL(tx))
+    monthCount: new Set(projectedItems.map((tx) => tx.date.slice(0, 7))).size,
+    neutralTotal: projectedItems.filter((tx) => classifyTransaction(tx, categories).isNeutral && isSettledBRL(tx)).reduce((sum, tx) => sum + cents(tx), 0) / 100,
+    totalInvested: projectedItems.filter((tx) => classifyTransaction(tx, categories).isInvestment && isSettledBRL(tx))
       .reduce((sum, tx) => sum + (tx.type === 'expense' ? cents(tx) : -cents(tx)), 0) / 100,
   };
 }

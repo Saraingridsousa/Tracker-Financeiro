@@ -2,7 +2,20 @@ import type { Transaction } from './finance';
 
 export interface ProductState { state: 'available' | 'empty' | 'unavailable' | 'error'; returned?: number; message?: string; accounts?: (ProductState & {accountId:string})[]; }
 export interface AccountInstitution { name: string | null; code: string | null; family: string | null; source: string; state: string; }
-export interface BankBill { id:string; providerId:string; itemId:string; accountId:string; dueDate:string; closingDate:string|null; totalAmountCents:number; currencyCode:string; minimumPaymentCents:number|null; observedAt?:string; }
+export interface BankBill {
+  id:string;
+  providerId:string;
+  itemId:string;
+  accountId:string;
+  dueDate:string;
+  closingDate:string|null;
+  totalAmountCents:number;
+  currencyCode:string;
+  minimumPaymentCents:number|null;
+  payments?: { date:string|null; amountCents:number; currencyCode:string; valueType:string|null }[];
+  financeCharges?: { type:string|null; amountCents:number; currencyCode:string }[];
+  observedAt?:string;
+}
 export interface BankInvestment { code?:string|null; id:string; providerId:string; itemId:string; name:string; type:string; subtype:string|null; currencyCode:string; balanceCents:number; grossAmountCents:number|null; originalAmountCents:number|null; profitCents:number|null; quantity:number|null; referenceDate:string|null; dueDate:string|null; status:string; observedAt?:string; }
 export interface BankConnection {
   id: string;

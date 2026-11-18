@@ -1,27 +1,104 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { filterConnectedPositions, formatOptionalCents, situationLabels } from '../domain/connectedInvestments';
 import type { ConnectedSummary, Situation } from '../domain/connectedInvestments';
+import type { Transaction } from '../types/finance';
+import { classifyTransaction } from '../domain/finance';
 const box = 'rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900';
 const select = 'mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-950';
 const date = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR') : 'não informada';
 export function ConnectedInvestmentValue({ summary }: { summary: ConnectedSummary }) {
   return <><span data-connected-value>{summary.status === 'loading' ? 'Carregando…' : summary.primary ? formatOptionalCents(summary.primary.cents, 'BRL') : '—'}</span><small className="mt-2 block text-xs font-normal text-slate-500 dark:text-slate-400">Pluggy · saldo líquido em BRL{summary.partial ? ' · Cobertura parcial' : ''}{summary.stale ? ' · Leitura antiga' : ''}{summary.otherCurrencies.length ? ' · Outras moedas separadas' : ''}{summary.status === 'noConnections' ? ' · Nenhuma conexão registrada' : summary.status === 'notQueried' ? ' · Ainda não consultado ou indisponível' : summary.status === 'loadError' ? ' · Falha na leitura local' : ''}</small></>;
 }
-export function ConnectedInvestments({ summary }: { summary: ConnectedSummary }) {
+export function ConnectedInvestments({ summary, transactions = [], categories = [] }: { summary: ConnectedSummary; transactions?: Transaction[]; categories?: import('../types/finance').Category[] }) {
   const [institution, setInstitution] = useState('');
   const [classKey, setClassKey] = useState('');
   const [situation, setSituation] = useState<Situation | 'all'>('active');
   const positions = filterConnectedPositions(summary.positions, { institution, classKey, situation });
   const messages: Record<string, string> = { loading: 'Carregando investimentos…', loadError: 'Falha na leitura local. Tente ler o PC novamente.', noConnections: 'Nenhuma conexão registrada. Acesse Conexões.', notQueried: 'Investimentos ainda não consultados ou indisponíveis. Confira Conexões.' };
   const classes = [...new Map(summary.positions.map(p => [p.classKey, p.classLabel])).entries()];
+  const colorByClass = ['#38bdf8', '#34d399', '#a78bfa', '#f59e0b', '#f472b6', '#f97316', '#94a3b8'];
+  const areaData = useMemo(() => summary.byClass.map((group, index) => ({
+    name: group.label,
+    value: group.cents / 100,
+    color: colorByClass[index % colorByClass.length],
+  })), [summary.byClass]);
+
+  const cashFlow = useMemo(() => {
+    const monthly = new Map<string, { month: string; sortKey: string; applications: number; redemptions: number }>();
+    const monthNames = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    transactions.forEach((transaction) => {
+      const date = transaction.date?.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+      const classified = classifyTransaction(transaction, categories);
+      const text = transaction.description.toLowerCase();
+      if (!classified.isInvestment) return;
+      const [year, month] = date.split('-');
+      const sortKey = `${year}-${month}`;
+      const row = monthly.get(sortKey) ?? { month: `${monthNames[Number(month) - 1]}/${year.slice(2)}`, sortKey, applications: 0, redemptions: 0 };
+      const cents = typeof transaction.amountCents === 'number' ? transaction.amountCents : Math.round(Math.abs(transaction.amount) * 100);
+      if (transaction.type === 'income' || /\bresgate\b/.test(text)) row.redemptions += cents / 100;
+      else row.applications += cents / 100;
+      monthly.set(sortKey, row);
+    });
+    return [...monthly.values()].sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+  }, [transactions, categories]);
   return <section aria-label="Investimentos conectados" className="space-y-5">
-    <div className={box}><h2 className="text-xl font-semibold">Investimentos conectados</h2><p className="mt-1 text-sm text-slate-500">Posições importadas pela Pluggy. Carteira manual separada; editar nela não altera seu banco.</p><p className="mt-4 text-sm">Valor atual dos investimentos</p><div className="mt-1 text-3xl font-semibold"><ConnectedInvestmentValue summary={summary} /></div><p className="mt-3 text-xs text-slate-500">Última leitura local: {date(summary.lastReadAt)}. Essa data não é a atualização do banco. O período das movimentações não filtra posições.</p>
+    <div className={box}><h2 className="text-xl font-semibold">Investimentos conectados</h2><p className="mt-1 text-sm text-slate-500">Posições recebidas pela Pluggy. Consulte novos dados na aba Conexões.</p><p className="mt-4 text-sm">Valor atual dos investimentos</p><div className="mt-1 text-3xl font-semibold"><ConnectedInvestmentValue summary={summary} /></div><p className="mt-3 text-xs text-slate-500">Última leitura local: {date(summary.lastReadAt)}. Essa data não é a atualização do banco. O período das movimentações não filtra posições.</p>
     {summary.status !== 'ready' && <p role="status" className="mt-3">{messages[summary.status]}</p>}
     {summary.partial && <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">Cobertura parcial{summary.partialLabels.length ? ': ' + summary.partialLabels.join(', ') : ''}. Valores preservados representam o último valor conhecido. Situações desconhecidas ficam fora da soma; confira Conexões.</p>}
     {summary.stale && <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">Há leituras com mais de 48 horas. Confira a data de referência de cada posição.</p>}
     {summary.otherCurrencies.map(t => <p key={t.currencyCode} className="mt-2 text-sm">{t.currencyCode}: {formatOptionalCents(t.cents, t.currencyCode)} · sem conversão para BRL</p>)}
     <details className="mt-3 text-xs text-slate-500"><summary className="cursor-pointer">Cobertura por conexão</summary><ul className="mt-2 space-y-1">{summary.coverage.map(c => <li key={c.id}>{c.label}: {({ complete: 'dados retornados', empty: 'consulta vazia', error: 'erro; histórico preservado', unavailable: 'indisponível', notQueried: 'não consultado' } as Record<string, string>)[c.state]} · leitura {date(c.readAt)}</li>)}</ul></details></div>
     {summary.status === 'ready' && <>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className={box}>
+          <h3 className="font-semibold">Distribuição por área</h3>
+          {areaData.length ? (
+            <>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={areaData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={86} paddingAngle={3}>
+                      {areaData.map((item) => <Cell key={item.name} fill={item.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value))} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {areaData.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-950">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                      <span className="truncate text-slate-700 dark:text-slate-200">{item.name}</span>
+                    </span>
+                    <strong className="ml-2 shrink-0">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.value)}</strong>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : <p className="mt-3 text-sm text-slate-500">Nenhuma posição atual em BRL.</p>}
+        </section>
+
+        <section className={box}>
+          <h3 className="font-semibold">Aportes e resgates por mês</h3>
+          {cashFlow.length ? (
+            <div className="mt-4 h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={cashFlow} barGap={6}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.18)" />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                  <Tooltip formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value))} />
+                  <Bar dataKey="applications" name="Aportes" fill="#22c55e" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="redemptions" name="Resgates" fill="#f87171" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : <p className="mt-3 text-sm text-slate-500">Nenhuma movimentação de investimento no período carregado.</p>}
+        </section>
+      </div>
       <div className="grid gap-4 md:grid-cols-2">{[{ title: 'Por instituição · BRL', groups: summary.byInstitution }, { title: 'Por classe · BRL', groups: summary.byClass }].map(({ title, groups }) => <section key={title} className={box}><h3 className="font-semibold">{title}</h3>{groups.length ? groups.map(g => <div key={g.key} className="mt-3"><div className="flex justify-between gap-3 text-sm"><span className="min-w-0 break-words">{g.label}</span><strong className="shrink-0">{formatOptionalCents(g.cents, 'BRL')}</strong></div><div className="mt-1 h-1.5 overflow-hidden rounded bg-slate-100 dark:bg-slate-800"><div className="h-full bg-cyan-500" style={{ width: Math.max(0, Math.min(100, summary.primary?.cents ? g.cents / summary.primary.cents * 100 : 0)) + '%' }} /></div></div>) : <p className="mt-3 text-sm text-slate-500">Nenhuma posição atual em BRL.</p>}</section>)}</div>
       <section className={box}><h3 className="font-semibold">Posições e histórico</h3><p className="mt-1 text-xs text-slate-500">{summary.counts.active} atuais · {summary.counts.withdrawn} resgatadas · {summary.counts.pending} pendentes · {summary.counts.unknown} desconhecidas · {summary.counts.notReturned} não retornadas</p><div className="mt-4 grid gap-3 sm:grid-cols-3">
       <label className="min-w-0 text-sm">Instituição<select aria-label="Instituição dos investimentos" className={select} value={institution} onChange={e => setInstitution(e.target.value)}><option value="">Todas</option>{summary.coverage.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>

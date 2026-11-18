@@ -26,6 +26,13 @@ export interface Transaction {
   originalCurrencyCode?: string;
   amountSource?: 'provider.amount' | 'provider.amountInAccountCurrency';
   providerDate?: string;
+  creditCardMetadata?: {
+    installmentNumber?: number;
+    totalInstallments?: number;
+    purchaseDate?: string;
+    billId?: string;
+    totalAmountCents?: number;
+  };
   manualCategory?: boolean;
   isInternalTransfer?: boolean;
   isSelfTransfer?: boolean;

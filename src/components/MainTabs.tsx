@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from 'react';
-export type MainTab = 'overview' | 'investments' | 'connections';
-const tabs = [{ key: 'overview', label: 'Visão Geral' }, { key: 'investments', label: 'Investimentos' }, { key: 'connections', label: 'Conexões' }] as const;
+export type MainTab = 'overview' | 'investments' | 'cards' | 'connections';
+const tabs = [{ key: 'overview', label: 'Visão Geral' }, { key: 'investments', label: 'Investimentos' }, { key: 'cards', label: 'Cartões' }, { key: 'connections', label: 'Conexões' }] as const;
 export function MainTabs({ active, onChange }: { active: MainTab; onChange: (tab: MainTab) => void }) {
   function navigate(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null;

@@ -7,31 +7,24 @@ import { useSharedFinance } from './hooks/useSharedFinance';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
-  Download,
-  FileText,
   Filter,
   Moon,
-  Plus,
-  Settings,
   Sun,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { BankingPanel } from './components/BankingPanel';
+import { CardsPanel } from './components/CardsPanel';
 import { useBanking } from './hooks/useBanking';
-import { classifyTransaction, isRealExpense, isRealIncome, participatesInResult, summarizeTransactions } from './domain/finance';
+import { classifyTransaction, isInvestmentApplication, isRealExpense, isRealIncome, participatesInResult, projectInstallmentTransactions, summarizeTransactions } from './domain/finance';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { CategoryPieChart } from './components/CategoryPieChart';
-import { InvestmentsDashboard } from './components/InvestmentsDashboard';
 import { MonthlyBarChart } from './components/MonthlyBarChart';
 import { TransactionTable } from './components/TransactionTable';
-import { useInvestments } from './hooks/useInvestments';
-import { parseBankFile } from './lib/parseBankFile';
 import { useTransactions } from './hooks/useTransactions';
 import type { Category, Transaction } from './types/finance';
-import { parseLegacyBackup } from './domain/backup';
 import { filterTransactionsByPeriod } from './domain/period';
 
 const toneStyles = {
@@ -80,8 +73,8 @@ const getMonthLabel = (date: Date) =>
   new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(date).replace('.', '');
 
 
-const buildMonthlyData = (items: Transaction[]) => {
-  const grouped = new Map<string, { income: number; expenses: number; month: string; sortKey: string }>();
+const buildMonthlyData = (items: Transaction[], categories: Category[] = []) => {
+  const grouped = new Map<string, { income: number; expenses: number; invested: number; month: string; sortKey: string }>();
 
   items.forEach((item) => {
     let year = '';
@@ -117,14 +110,17 @@ const buildMonthlyData = (items: Transaction[]) => {
     const label = monthLabels[monthNum.padStart(2, '0')] || monthNum;
 
     if (!grouped.has(sortKey)) {
-      grouped.set(sortKey, { month: label, sortKey, income: 0, expenses: 0 });
+      grouped.set(sortKey, { month: label, sortKey, income: 0, expenses: 0, invested: 0 });
     }
 
     const current = grouped.get(sortKey)!;
     const absAmount = Math.abs(item.amount);
 
-    if (item.type === 'income') {
+    const classified = classifyTransaction(item, categories);
+    if (item.type === 'income' && participatesInResult(item, categories)) {
       current.income += absAmount;
+    } else if (isInvestmentApplication(item, categories)) {
+      current.invested += absAmount;
     } else if (
       (item.type === 'expense' || item.amount < 0) &&
       !item.isNeutral &&
@@ -259,10 +255,6 @@ const buildIncomeCategoryData = (items: Transaction[], categories: Category[], p
 };
 
 function App({ now = () => new Date() }: { now?: () => Date } = {}) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const backupInputRef = useRef<HTMLInputElement | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<(typeof periodOptions)[number]['value']>('all');
   const [categoryChartPeriod, setCategoryChartPeriod] = useState<string>('ALL');
   const [incomeChartPeriod, setIncomeChartPeriod] = useState<string>('ALL');
@@ -277,68 +269,30 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
     return 'light';
   });
   const [showCategoryManager, setShowCategoryManager] = useState(false);
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<MainTab>('overview');
   const banking = useBanking();
   const connectedSummary = summarizeConnectedInvestments(banking, now());
-  const [investmentView, setInvestmentView] = useState<'connected' | 'manual'>('connected');
-  const [dataSource, setDataSource] = useState<'banking' | 'legacy'>('banking');
   const shared = useSharedFinance(banking.snapshot.sharedStateAvailable === true || banking.snapshot.accessMode === 'private' || (typeof window !== 'undefined' && window.location?.protocol === 'https:'));
   const transactionsStore = useTransactions(shared.backing, banking.loaded !== false);
-  const investmentsStore = useInvestments(shared.backing, banking.loaded !== false);
-  const { portfolioSummary } = investmentsStore;
-  const {
-    transactions: legacyTransactions,
-    categories,
-    rules,
-    addTransactions,
-    inferCategory,
-    addCategory,
-    updateCategory,
-    deleteCategory,
-    addRule,
-    deleteRule,
-    updateTransaction: updateLegacyTransaction,
-    updateTransactionCategory: updateLegacyCategory,
-    deleteTransaction: deleteLegacyTransaction,
-    resetAllData,
-    importBackup,
-    exportBackup,
-  } = transactionsStore;
-  const {
-    assets,
-    orders,
-    addAsset,
-    updateAsset,
-    deleteAsset,
-    addOrder,
-    deleteOrder,
-    importAssetsFromCsv,
-    resetAllData: resetInvestments,
-    importBackup: importInvestmentBackup,
-    exportBackup: exportInvestmentBackup,
-  } = investmentsStore;
+  const { categories, rules, inferCategory, addCategory, updateCategory, deleteCategory, addRule, deleteRule } = transactionsStore;
 
   const transactions = useMemo<Transaction[]>(() => {
-    const rows: Transaction[] = dataSource === 'legacy' ? legacyTransactions : banking.snapshot.transactions.map((tx) => {
+    const rows: Transaction[] = banking.snapshot.transactions.map((tx) => {
       const categoryId = tx.manualCategory && tx.categoryId ? tx.categoryId : inferCategory(tx.description, tx.type);
       const category = categories.find((entry) => entry.id === categoryId);
       return { ...tx, categoryId, categoryName: category?.name ?? 'Sem categoria', category: category?.name };
     });
     return rows.map((tx) => classifyTransaction(tx, categories));
-  }, [dataSource, legacyTransactions, banking.snapshot.transactions, categories, rules]);
+  }, [banking.snapshot.transactions, categories, rules]);
 
   const updateTransactionCategory = (id: string, categoryId: string) => {
-    if (dataSource === 'banking') void banking.updateTransaction(id, { categoryId });
-    else updateLegacyCategory(id, categoryId);
+    void banking.updateTransaction(id, { categoryId });
   };
   const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    if (dataSource === 'banking') void banking.updateTransaction(id, { description: updates.description, notes:updates.notes, isSelfTransfer:updates.isSelfTransfer });
-    else updateLegacyTransaction(id, updates);
+    void banking.updateTransaction(id, { description: updates.description, notes:updates.notes, isSelfTransfer:updates.isSelfTransfer });
   };
   const deleteTransaction = (id: string) => {
-    if (dataSource === 'banking') void banking.hideTransaction(id);
-    else deleteLegacyTransaction(id);
+    void banking.hideTransaction(id);
   };
 
   useEffect(() => {
@@ -349,22 +303,23 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
 
   const periodReference = now();
   const periodMonth = new Date(periodReference.getFullYear(), periodReference.getMonth(), 1).getTime();
-  const filteredTransactions = useMemo(() => filterTransactionsByPeriod(transactions, selectedPeriod, { source: dataSource, now: () => new Date(periodMonth) }), [transactions, selectedPeriod, dataSource, periodMonth]);
-  const summary = useMemo(() => ({ ...summarizeTransactions(filteredTransactions, categories), totalInvested: portfolioSummary.totalCurrentValue }), [categories, filteredTransactions, portfolioSummary.totalCurrentValue]);
+  const projectedTransactions = useMemo(() => projectInstallmentTransactions(transactions), [transactions]);
+  const filteredTransactions = useMemo(() => filterTransactionsByPeriod(projectedTransactions, selectedPeriod, { source: 'banking', now: () => new Date(periodMonth) }), [projectedTransactions, selectedPeriod, periodMonth]);
+  const summary = useMemo(() => summarizeTransactions(filteredTransactions, categories), [categories, filteredTransactions]);
 
-  const monthlyChartData = useMemo(() => buildMonthlyData(filteredTransactions.filter((tx) => participatesInResult(tx, categories))), [filteredTransactions, categories]);
+  const monthlyChartData = useMemo(() => buildMonthlyData(filteredTransactions, categories), [filteredTransactions, categories]);
 
   const categoryMonthOptions = useMemo(() => {
     const months = new Map<string, string>();
 
-    transactions.forEach((transaction) => {
+    projectedTransactions.forEach((transaction) => {
       const key = getTransactionMonthKey(transaction.date);
       if (!key) return;
       months.set(key, key);
     });
 
     return Array.from(months.keys()).sort((left, right) => right.localeCompare(left));
-  }, [transactions]);
+  }, [projectedTransactions]);
 
   const filteredCategoryExpenses = useMemo(() => {
     const base = getRealExpenseTransactions(filteredTransactions, categories);
@@ -405,145 +360,12 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
 
   const topIncomeSourceList = useMemo(() => [...incomeSourceChartData].slice(0, 5), [incomeSourceChartData]);
 
-  const normalizeImportedCategory = (input?: string) => {
-    if (!input) return null;
-
-    const raw = String(input).trim();
-    if (!raw || raw.toUpperCase() === 'OUTROS') return null;
-
-    const normalized = raw.toUpperCase();
-    const map: Record<string, string> = {
-      SUPERMERCADO: 'Supermercado',
-      MERCADO: 'Supermercado',
-      TRANSPORTE: 'Transporte',
-      RESTAURANTES: 'Alimentação',
-      BARES: 'Alimentação',
-      CULTURA: 'Lazer / Cultura',
-      ENTRETENIMENTO: 'Lazer / Cultura',
-      DROGARIA: 'Saúde',
-      SAUDE: 'Saúde',
-      VESTUARIO: 'Compras',
-      VESTUÁRIO: 'Compras',
-      COMPRAS: 'Compras',
-      SERVICOS: 'Serviços',
-      SERVIÇOS: 'Serviços',
-      ENSINO: 'Educação',
-      LIVRARIAS: 'Educação',
-    };
-
-    return map[normalized] ?? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-  };
-
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || !files.length) return;
-
-    setIsImporting(true);
-
-    try {
-      const parsed: Transaction[] = [];
-
-      for (const file of Array.from(files)) {
-        let list: Transaction[] = [];
-
-        const lowerName = file.name.toLowerCase();
-
-        if (lowerName.endsWith('.pdf')) {
-          const { parsePDFStatement } = await import('./utils/pdfParser');
-          list = await parsePDFStatement(file);
-        } else if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
-          const { parseExcelStatement } = await import('./utils/excelParser');
-          list = await parseExcelStatement(file);
-        } else {
-          list = await parseBankFile(file);
-        }
-
-        const normalized = list.map((item) => {
-          const importedCategory = normalizeImportedCategory(item.category ?? item.categoryName);
-          const fallbackCategoryId = inferCategory(item.description, item.type);
-          const resolvedCategoryId =
-            importedCategory && categories.some((category) => category.name.toLowerCase() === importedCategory.toLowerCase())
-              ? categories.find((category) => category.name.toLowerCase() === importedCategory.toLowerCase())?.id ?? fallbackCategoryId
-              : fallbackCategoryId;
-
-          return {
-            ...item,
-            categoryId: resolvedCategoryId,
-            categoryName: categories.find((category) => category.id === resolvedCategoryId)?.name ?? importedCategory ?? 'Sem categoria',
-            category: importedCategory ?? item.category ?? item.categoryName,
-          };
-        });
-
-        parsed.push(...normalized);
-      }
-
-      if (!parsed.length) {
-        window.alert('Nenhuma transação foi reconhecida neste arquivo. Verifique se o extrato está em formato válido (.CSV, .OFX ou .PDF).');
-        return;
-      }
-
-      addTransactions(parsed);
-      setDataSource('legacy');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Não foi possível importar este arquivo.';
-      window.alert(message);
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const exportBackupFile = () => {
-    const payload = {
-      ...exportBackup(),
-      ...exportInvestmentBackup(),
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `tracker-financeiro-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importBackupFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      if (shared.enabled) { shared.model?.restore(text); return; }
-      const payload = parseLegacyBackup(text);
-      importBackup(payload);
-      if (payload.assets && payload.investmentOrders) {
-        importInvestmentBackup({
-          assets: payload.assets,
-          investmentOrders: payload.investmentOrders,
-          exportedAt: payload.exportedAt,
-        });
-      }
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Não foi possível restaurar este backup.');
-    } finally {
-      event.target.value = '';
-    }
-  };
-
-  const clearAllData = () => {
-    if (!window.confirm('Tem certeza que deseja limpar todos os dados? Esta ação não pode ser desfeita.')) {
-      return;
-    }
-
-    resetAllData();
-    resetInvestments();
-  };
-
-  const browserCopy = () => ({ ...transactionsStore.exportLocalBackup(), ...investmentsStore.exportLocalBackup() });
-  const sharedPanel = <SharedFinancePanel shared={shared} browserCopy={browserCopy} />;
+  const sharedPanel = <SharedFinancePanel shared={shared} initialCategories={categories} />;
   if (shared.enabled && !shared.status.payload) return sharedPanel;
   return (<>
     {sharedPanel}
     {banking.loaded === false && banking.error && <div role="alert" className="m-4 rounded-xl bg-amber-50 p-4 text-amber-900"><p>{banking.error}</p><button type="button" className="mt-2 rounded-lg border px-3 py-2" onClick={() => void banking.refresh()}>Tentar ler o PC novamente</button></div>}
-    <fieldset disabled={banking.loaded === false || (!shared.enabled && (!transactionsStore.localReady || !investmentsStore.localReady)) || (shared.enabled && (shared.status.busy || Boolean(shared.status.error)))} className="min-w-0">
+    <fieldset disabled={banking.loaded === false || (!shared.enabled && !transactionsStore.localReady) || (shared.enabled && (shared.status.busy || Boolean(shared.status.error)))} className="min-w-0">
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-8 flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-soft backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
@@ -563,7 +385,7 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
                 >
                   {periodOptions.map((option) => (
                     <option key={option.value} value={option.value}>
-                      {dataSource === 'legacy' && option.value === 'month' ? 'Último mês importado' : option.label}
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -586,91 +408,6 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
                 Categorias
               </button>
 
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowSettingsMenu((current) => !current)}
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                  aria-label="Abrir configurações"
-                  aria-expanded={showSettingsMenu}
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-
-                {showSettingsMenu && (
-                  <div className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        exportBackupFile();
-                        setShowSettingsMenu(false);
-                      }}
-                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      <span>Backup do histórico e preferências (.json)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        backupInputRef.current?.click();
-                        setShowSettingsMenu(false);
-                      }}
-                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      <span>Restaurar backup (.json)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetAllData();
-                        setShowSettingsMenu(false);
-                      }}
-                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-amber-600 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                    >
-                      <span>Limpar transações</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetInvestments();
-                        setShowSettingsMenu(false);
-                      }}
-                      className="flex w-full items-center justify-between border-t border-slate-200 px-4 py-3 text-left text-sm text-rose-600 transition hover:bg-rose-50 dark:border-slate-700 dark:text-rose-400 dark:hover:bg-rose-950/40"
-                    >
-                      <span>Limpar carteira e investimentos</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                title="Formatos suportados: .OFX, .CSV, .PDF"
-                className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-400"
-              >
-                <Plus className="h-4 w-4" />
-                Importar extrato
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".ofx,.csv,.pdf,.xlsx,.xls"
-                multiple
-                title="Formatos suportados: .OFX, .CSV, .PDF, .XLSX"
-                hidden
-                onChange={(event) => handleFiles(event.target.files)}
-              />
-              <input
-                ref={backupInputRef}
-                type="file"
-                accept=".json,application/json"
-                hidden
-                onChange={importBackupFile}
-              />
             </div>
           </div>
         </header>
@@ -679,75 +416,14 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
         {activeTab === 'overview' ? (
           <>
             <section aria-label="Resumo das conexões" className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300"><span>{banking.loaded ? banking.snapshot.connections.length + ' conexões' : 'Lendo conexões…'} · {connectedSummary.partial ? 'Cobertura parcial' : 'Cache local'}{connectedSummary.lastReadAt ? ' · Última leitura: ' + new Date(connectedSummary.lastReadAt).toLocaleString('pt-BR') : ''}{banking.error ? ' · ' + banking.error : ''}</span><button type="button" className="font-medium text-cyan-700 underline dark:text-cyan-300" onClick={() => setActiveTab('connections')}>Gerenciar conexões</button></section>
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <label className="text-sm font-medium">Dados do painel <select aria-label="Fonte dos dados" value={dataSource} onChange={(event) => setDataSource(event.target.value as 'banking' | 'legacy')} className="ml-2 rounded-lg border border-slate-300 bg-transparent p-2 dark:border-slate-700"><option value="banking">Bancos conectados</option><option value="legacy">Histórico importado</option></select></label>
-          <p className="max-w-2xl text-xs text-slate-500">Fontes separadas para não contar os mesmos gastos duas vezes. Resultado liquidado em BRL não é saldo bancário; saldos por conta aparecem na aba Conexões. Pendentes e outras moedas não entram nesses totais.</p>
-        </section>
-
-
-            {dataSource === 'banking' ? (transactions.length === 0 ? <section className="rounded-xl bg-cyan-50 p-5 text-sm text-cyan-900 dark:bg-cyan-950 dark:text-cyan-100">Nenhuma movimentação bancária armazenada ainda. Configure o Meu Pluggy e sincronize a conexão na aba Conexões. Seus arquivos antigos continuam disponíveis em Histórico importado.</section> : null) : transactions.length === 0 ? (
-              <section
-                className={`mb-8 rounded-2xl border-2 border-dashed p-8 transition ${
-                  isDragging ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70'
-                }`}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setIsDragging(false);
-                  handleFiles(event.dataTransfer.files);
-                }}
-              >
-                <div className="flex flex-col items-center justify-center gap-4 text-center">
-                  <div className="rounded-full bg-cyan-500/10 p-4 text-cyan-600 dark:bg-slate-800 dark:text-cyan-400">
-                    <FileText className="h-8 w-8" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Seu painel está limpo</h2>
-                    <p className="mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-                      Comece importando um extrato .OFX, .CSV, .PDF ou .XLSX para visualizar seus gastos, receitas e categorias a partir dos arquivos escolhidos.
-                    </p>
-                    <p className="mt-2 text-xs font-medium uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                      Formatos suportados: .OFX, .CSV, .PDF, .XLSX
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-medium text-slate-950 hover:bg-cyan-400"
-                  >
-                    {isImporting ? 'Importando...' : 'Importar primeiro extrato'}
-                  </button>
-                </div>
-              </section>
-            ) : (
-              <section className="mb-8 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Importar extrato</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Adicione mais arquivos sem perder os dados já cadastrados.</p>
-                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Formatos suportados: .OFX, .CSV, .PDF, .XLSX</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  >
-                    {isImporting ? 'Importando...' : 'Selecionar arquivos'}
-                  </button>
-                </div>
-              </section>
-            )}
+            {transactions.length === 0 && <section role="status" className="rounded-xl bg-cyan-50 p-5 text-sm text-cyan-900 dark:bg-cyan-950 dark:text-cyan-100">{banking.loaded ? 'Nenhuma movimentação bancária armazenada. Consulte os dados dos seus bancos na aba Conexões.' : 'Carregando movimentações dos bancos…'}</section>}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
             { label: 'Resultado do período', value: summary.balance, icon: Wallet, tone: 'emerald' },
             { label: 'Entradas liquidadas', value: summary.income, icon: ArrowUpCircle, tone: 'cyan' },
             { label: 'Saídas liquidadas', value: summary.expenses, icon: ArrowDownCircle, tone: 'rose' },
-            { label: dataSource === 'banking' ? 'Valor atual dos investimentos' : 'Carteira manual · valor atual', value: summary.totalInvested, icon: TrendingUp, tone: 'violet' },
+            { label: 'Valor atual dos investimentos', value: summary.totalInvested, icon: TrendingUp, tone: 'violet' },
           ].map(({ label, value, icon: Icon, tone }) => (
             <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
               <div className="flex items-center justify-between">
@@ -871,22 +547,11 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
             </div>
           </>
         ) : activeTab === 'connections' ? (
-          <BankingPanel banking={banking} onShowInvestments={() => { setInvestmentView('connected'); setActiveTab('investments'); }} />
+          <BankingPanel banking={banking} onShowInvestments={() => setActiveTab('investments')} />
+        ) : activeTab === 'cards' ? (
+          <CardsPanel banking={banking} />
         ) : (
-          <div className="space-y-5">
-          <div role="group" aria-label="Origem dos investimentos" className="flex flex-wrap gap-2">{([{ key: 'connected', label: 'Conectados' }, { key: 'manual', label: 'Carteira manual' }] as const).map(view => <button type="button" key={view.key} aria-pressed={investmentView === view.key} onClick={() => setInvestmentView(view.key)} className={'rounded-lg border px-4 py-2 text-sm ' + (investmentView === view.key ? 'bg-cyan-500 text-slate-950' : '')}>{view.label}</button>)}</div>
-          {investmentView === 'connected' ? <ConnectedInvestments summary={connectedSummary} /> : <><p className="text-sm text-slate-500">Carteira manual independente. Estas operações não alteram investimentos no banco e não são somadas à carteira conectada.</p>
-          <InvestmentsDashboard
-            assets={assets}
-            orders={orders}
-            onAddAsset={addAsset}
-            onUpdateAsset={updateAsset}
-            onDeleteAsset={deleteAsset}
-            onAddOrder={addOrder}
-            onDeleteOrder={deleteOrder}
-            onImportCsv={importAssetsFromCsv}
-          /></>}
-          </div>
+          <ConnectedInvestments summary={connectedSummary} transactions={transactions} categories={categories} />
         )}
         </div>
       </div>

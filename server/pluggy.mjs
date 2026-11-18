@@ -127,11 +127,25 @@ export function normalizeAccount(account, itemId) {
     ...(account.creditData?{creditData:{...pick(account.creditData,['brand','status','holderType']),creditLimitCents:account.creditData.creditLimit==null?null:toCents(account.creditData.creditLimit),availableCreditLimitCents:account.creditData.availableCreditLimit==null?null:toCents(account.creditData.availableCreditLimit),dueDate:account.creditData.balanceDueDate?.slice(0,10)??null}}:{}) };
 }
 
+const normalizeInstallmentDescription = (description) => {
+  const text = String(description ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const match = String(description ?? '').match(/(?:parcela|parcelamento|parcelado)[^0-9]*(\d{1,2})\s*(?:de|\/)\s*(\d{1,2})\b/i) ??
+    String(description ?? '').match(/\b(\d{1,2})\s*(?:\/|\bde\b)\s*(\d{1,2})\b/i);
+  if (!match) return null;
+  const installmentNumber = Number(match[1]);
+  const totalInstallments = Number(match[2]);
+  return installmentNumber >= 1 && totalInstallments >= 2 && installmentNumber <= totalInstallments
+    ? { installmentNumber, totalInstallments }
+    : null;
+};
+
 export function normalizeTransaction(transaction, account, bankName = '') {
   if ((transaction.accountId !== undefined && transaction.accountId !== account.id) || !validId(transaction.id) || typeof transaction.description !== 'string' || !validTransactionDate(transaction.date) || !['POSTED','PENDING'].includes(transaction.status || 'POSTED') || !currency(transaction.currencyCode || account.currencyCode)) throw new Error('Dados de transação inválidos.');
   const originalAmountCents = toCents(transaction.amount);
   const converted = transaction.currencyCode && transaction.currencyCode !== account.currencyCode && transaction.amountInAccountCurrency != null;
   const value = converted ? transaction.amountInAccountCurrency : transaction.amount;
+  const descriptionInstallment = normalizeInstallmentDescription(transaction.description);
+  const explicitMetadata = transaction.creditCardMetadata ?? {};
   const type = account.type === 'CREDIT'
     ? (transaction.amount < 0 ? 'income' : 'expense')
     : transaction.type === 'DEBIT' ? 'expense' : transaction.type === 'CREDIT' ? 'income' : transaction.amount < 0 ? 'expense' : 'income';
@@ -145,8 +159,10 @@ export function normalizeTransaction(transaction, account, bankName = '') {
     providerCategory: transaction.category ?? null, providerCategoryId: transaction.categoryId ?? null,
     providerUpdatedAt: transaction.updatedAt ?? null, operationType: transaction.operationType ?? null,
     paymentData: pick(transaction.paymentData, ['paymentMethod','referenceNumber','reason','receiverReferenceId']),
-    creditCardMetadata: { ...pick(transaction.creditCardMetadata, ['installmentNumber','totalInstallments','purchaseDate','billId']),
-      ...(transaction.creditCardMetadata?.totalAmount != null ? { totalAmountCents: toCents(transaction.creditCardMetadata.totalAmount) } : {}),
+    creditCardMetadata: { ...pick(explicitMetadata, ['installmentNumber','totalInstallments','purchaseDate','billId']),
+      ...(!explicitMetadata.installmentNumber && descriptionInstallment ? { installmentNumber: descriptionInstallment.installmentNumber } : {}),
+      ...(!explicitMetadata.totalInstallments && descriptionInstallment ? { totalInstallments: descriptionInstallment.totalInstallments } : {}),
+      ...(explicitMetadata.totalAmount != null ? { totalAmountCents: toCents(explicitMetadata.totalAmount) } : {}),
     },
     isSelfTransfer: ownTransferEvidence(transaction, account),
     ...(ownTransferEvidence(transaction, account)?{selfTransferEvidence:'matching-owner-documents'}:{}),

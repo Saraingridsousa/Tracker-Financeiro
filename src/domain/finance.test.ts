@@ -69,6 +69,37 @@ test('Pix recebido de dinheiro de terceiro não entra em entradas', () => {
   assert.equal(finance.summarizeTransactions([tx], categories).income, 0);
 });
 
+test('Compra parcelada é distribuída igualmente pelos meses das parcelas', () => {
+  const tx = {
+    ...base,
+    date: '2026-11-08',
+    amount: 300,
+    amountCents: 30000,
+    type: 'expense' as const,
+    description: 'Compra parcelada',
+    categoryId: 'alimentacao',
+    creditCardMetadata: {
+      installmentNumber: 1,
+      totalInstallments: 3,
+      purchaseDate: '2026-11-08',
+      totalAmountCents: 30000,
+    },
+  };
+
+  const projected = finance.projectInstallmentTransactions([tx]);
+  assert.equal(projected.length, 3);
+  assert.deepEqual(projected.map((item) => item.date), ['2026-11-08', '2026-12-08', '2027-01-08']);
+  assert.deepEqual(projected.map((item) => item.amountCents), [10000, 10000, 10000]);
+  assert.equal(finance.summarizeTransactions([tx], categories).expenses, 300);
+
+  const nextMonth = finance.projectInstallmentTransactions([{
+    ...tx,
+    amount: 100,
+    amountCents: 10000,
+  }]);
+  assert.equal(nextMonth.length, 1);
+});
+
 test('Statement Payment já persistido com flag antiga falsa também não vira renda', () => {
   const tx = { ...base, description: 'Statement Payment', type: 'income' as const, amount: 150, isCreditCardPayment: false, source: 'pluggy' as const };
   assert.equal(finance.summarizeTransactions([tx]).income, 0);
@@ -116,6 +147,22 @@ test('Investimentos reais, fallback sem categoria e proventos mantêm políticas
   const yieldIncome = { ...redemption, amount: 10, categoryId: 'proventos' };
   assert.equal(finance.summarizeTransactions([yieldIncome], healthCategories).income, 10);
   assert.equal(classifyTransaction(yieldIncome, healthCategories).isInvestment, false);
+});
+
+test('Resgate não conta como aplicação mensal', () => {
+  const application = { ...base, amount: 100, description: 'APLICACAO CDB', categoryId: 'investimentos' };
+  const redemption = { ...base, type: 'income' as const, amount: 70, description: 'RESGATE TESOURO', categoryId: 'investimentos' };
+  assert.equal(finance.isInvestmentApplication(application, healthCategories), true);
+  assert.equal(finance.isInvestmentApplication(redemption, healthCategories), false);
+});
+
+test('Descrição textual reconhece parcelas do PicPay e outros provedores', () => {
+  for (const description of ['Compra PicPay - parcela 2 de 12', 'Compra 3/10', 'Parcelamento 4 de 6']) {
+    const tx = { ...base, description, amount: 100, amountCents: 10000, type: 'expense' as const };
+    const installment = finance.inferCreditCardInstallment(tx);
+    assert.ok(installment);
+    assert.equal(installment.totalInstallments > 1, true);
+  }
 });
 
 test('Categoria neutra e marcações explícitas de transferência/fatura continuam fora do resultado', () => {
