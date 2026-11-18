@@ -56,6 +56,19 @@ test('Flags antigas de transferência genérica não excluem um Pix de terceiro'
   assert.equal(classifyTransaction({ ...base, categoryId: 'transferencia' }).isSelfTransfer, true);
 });
 
+test('Pix recebido de dinheiro de terceiro não entra em entradas', () => {
+  const tx = {
+    ...base,
+    type: 'income' as const,
+    description: 'Pix recebido - Jose Ricardo De Sousa Afonso',
+    categoryId: 'uncategorized',
+  };
+  assert.equal(finance.inferCategory(tx.description, categories, [], 'income'), 'transferencia');
+  assert.equal(classifyTransaction(tx, categories).isNeutral, true);
+  assert.equal(finance.isRealIncome(tx, categories), false);
+  assert.equal(finance.summarizeTransactions([tx], categories).income, 0);
+});
+
 test('Statement Payment já persistido com flag antiga falsa também não vira renda', () => {
   const tx = { ...base, description: 'Statement Payment', type: 'income' as const, amount: 150, isCreditCardPayment: false, source: 'pluggy' as const };
   assert.equal(finance.summarizeTransactions([tx]).income, 0);
