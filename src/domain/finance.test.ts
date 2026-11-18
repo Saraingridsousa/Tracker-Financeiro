@@ -41,7 +41,7 @@ test('Resumo usa centavos e exclui pendentes, remanejo e moedas diferentes', () 
     { ...base, id: 'small-1', amount: 0.1 },
     { ...base, id: 'small-2', amount: 0.2 },
     { ...base, id: 'pending', amount: 500, providerStatus: 'PENDING' as const },
-    { ...base, id: 'internal', amount: 10, categoryId: 'transferencia', isSelfTransfer: true },
+    { ...base, id: 'internal', amount: 10, categoryId: 'transferencia', isSelfTransfer: true, manualSelfTransfer: true },
     { ...base, id: 'usd', amount: 700, currencyCode: 'USD' },
   ];
   const result = finance.summarizeTransactions(rows, categories);
@@ -54,6 +54,71 @@ test('Resumo usa centavos e exclui pendentes, remanejo e moedas diferentes', () 
 test('Flags antigas de transferência genérica não excluem um Pix de terceiro', () => {
   assert.equal(classifyTransaction({ ...base, isInternalTransfer: true, isSelfTransfer: false, isNeutral: true }).isNeutral, false);
   assert.equal(classifyTransaction({ ...base, categoryId: 'transferencia' }).isSelfTransfer, false);
+});
+
+test('Categoria transferência não substitui confirmação explícita de conta própria', () => {
+  const categorizedOnly = {
+    ...base,
+    amount: 85,
+    description: 'PIX enviado para restaurante',
+    categoryId: 'transferencia',
+  };
+  assert.equal(classifyTransaction(categorizedOnly, categories).isSelfTransfer, false);
+  assert.equal(classifyTransaction(categorizedOnly, categories).isNeutral, false);
+  assert.equal(finance.isRealExpense(categorizedOnly, categories), true);
+  assert.equal(finance.summarizeTransactions([categorizedOnly], categories).expenses, 85);
+
+  const manuallyCategorized = { ...categorizedOnly, manualCategory: true };
+  assert.equal(classifyTransaction(manuallyCategorized, categories).isSelfTransfer, false);
+  assert.equal(finance.isRealExpense(manuallyCategorized, categories), true);
+
+  const explicitlyConfirmed = {
+    ...categorizedOnly,
+    manualCategory: true,
+    isSelfTransfer: true,
+    manualSelfTransfer: true,
+  };
+  assert.equal(classifyTransaction(explicitlyConfirmed, categories).isSelfTransfer, true);
+  assert.equal(classifyTransaction(explicitlyConfirmed, categories).isNeutral, true);
+  assert.equal(finance.isRealExpense(explicitlyConfirmed, categories), false);
+
+  const explicitRejection = {
+    ...categorizedOnly,
+    isSelfTransfer: true,
+    manualSelfTransfer: true,
+  };
+  assert.equal(classifyTransaction({ ...explicitRejection, isSelfTransfer: false }, categories).isNeutral, false);
+});
+
+test('Transações legadas classificadas automaticamente como transferência são reavaliadas', () => {
+  const legacy = {
+    ...base,
+    amount: 85,
+    description: 'PIX enviado para restaurante',
+    categoryId: 'transferencia',
+    isInternalTransfer: true,
+    isSelfTransfer: true,
+    isNeutral: true,
+  };
+  assert.equal(classifyTransaction(legacy, categories).isSelfTransfer, false);
+  assert.equal(classifyTransaction(legacy, categories).isInternalTransfer, false);
+  assert.equal(classifyTransaction(legacy, categories).isNeutral, false);
+  assert.equal(finance.isRealExpense(legacy, categories), true);
+  assert.equal(finance.summarizeTransactions([legacy], categories).expenses, 85);
+
+  const providerEvidence = {
+    ...legacy,
+    source: 'pluggy' as const,
+  };
+  assert.equal(classifyTransaction(providerEvidence, categories).isSelfTransfer, true);
+  assert.equal(classifyTransaction(providerEvidence, categories).isNeutral, true);
+
+  const manualEvidence = {
+    ...legacy,
+    isSelfTransfer: true,
+    manualSelfTransfer: true,
+  };
+  assert.equal(classifyTransaction(manualEvidence, categories).isSelfTransfer, true);
 });
 
 test('PIX recebido de terceiro permanece receita', () => {
@@ -82,8 +147,8 @@ test('PIX e TED só são neutros com evidência própria ou confirmação manual
 
   assert.equal(finance.summarizeTransactions([restaurant, otherPerson, tedThirdParty, insufficient], categories).expenses, 215);
 
-  const pixOwn = { ...base, description: 'PIX entre contas próprias', categoryId: 'transferencia', manualCategory: true };
-  const tedOwn = { ...base, description: 'TED entre contas próprias', categoryId: 'uncategorized', isSelfTransfer: true };
+  const pixOwn = { ...base, source: 'pluggy' as const, description: 'PIX entre contas próprias', categoryId: 'transferencia', isSelfTransfer: true, manualSelfTransfer: true };
+  const tedOwn = { ...base, source: 'pluggy' as const, description: 'TED entre contas próprias', categoryId: 'uncategorized', isSelfTransfer: true, manualSelfTransfer: true };
   for (const tx of [pixOwn, tedOwn]) {
     assert.equal(classifyTransaction(tx, categories).isSelfTransfer, true);
     assert.equal(classifyTransaction(tx, categories).isNeutral, true);
@@ -228,7 +293,7 @@ test('Categoria neutra e marcações explícitas de transferência/fatura contin
     { id: 'ajuste', name: 'Ajuste', color: '#000', keywords: [], type: 'both', isNeutral: true },
     { id: 'fora', name: 'Fora', color: '#000', keywords: [], type: 'both', excludeFromTotals: true },
   ];
-  for (const extra of [{ categoryId: 'ajuste' }, { categoryId: 'fora' }, { categoryId: 'saude', isSelfTransfer: true }, { categoryId: 'saude', isCreditCardPayment: true }]) {
+  for (const extra of [{ categoryId: 'ajuste' }, { categoryId: 'fora' }, { categoryId: 'saude', isSelfTransfer: true, manualSelfTransfer: true }, { categoryId: 'saude', isCreditCardPayment: true }]) {
     const tx = { ...base, description: 'APLICACAO DE INSULINA', manualCategory: true, ...extra };
     assert.equal(finance.summarizeTransactions([tx], policies).expenses, 0);
     assert.equal(classifyTransaction(tx, policies).isNeutral, true);

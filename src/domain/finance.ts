@@ -62,8 +62,8 @@ export function classifyTransaction(transaction: Transaction, categories: Catego
   const text = normalizeFinanceText(transaction.description);
   const category = categories.find((entry) => entry.id === transaction.categoryId);
   const manualTransferRejected = transaction.manualSelfTransfer === true && transaction.isSelfTransfer === false;
-  const providerConfirmedSelfTransfer = transaction.isSelfTransfer === true;
-  const manuallyConfirmedSelfTransfer = transaction.manualCategory === true && transaction.categoryId === 'transferencia';
+  const manuallyConfirmedSelfTransfer = transaction.manualSelfTransfer === true && transaction.isSelfTransfer === true;
+  const providerConfirmedSelfTransfer = transaction.source === 'pluggy' && transaction.isSelfTransfer === true;
   const isSelfTransfer = !manualTransferRejected && (providerConfirmedSelfTransfer || manuallyConfirmedSelfTransfer);
   const categoryNeutral = category?.id !== 'transferencia' && Boolean(category?.isNeutral || category?.excludeFromTotals);
   const isCreditCardPayment = transaction.isCreditCardPayment === true || transaction.categoryId === 'pagamento_fatura' || text === 'statement payment' || /pagamento (?:de )?fatura|pgto fatura|pagamento efetuado.*fatura/.test(text);
