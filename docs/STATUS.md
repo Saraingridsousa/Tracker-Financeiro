@@ -1,5 +1,26 @@
 # Estado — Tracker Financeiro / Meu Pluggy
 
+## PG-004 — abas e investimentos conectados — 17/11/2026
+
+Implementação retomada do Antigravity a partir de `42ecb88`, preservando o teste de domínio não commitado. Esse marco continha a especificação/ADR, mas ainda não o seletor nem a reorganização da interface. Trabalho feito somente em `Tracker-Financeiro-pluggy`, branch `feat/meu-pluggy-sync`.
+
+- Visão Geral inicial: navegação junto ao cabeçalho; indicadores/gráficos/transações, fonte bancária ou histórica e resumo compacto das conexões. O bloco administrativo aparece somente em Conexões.
+- Investimentos: conectados por padrão, filtros de instituição/classe/situação, distribuições BRL, posições atuais e histórico, referência/origem/última leitura e campos opcionais sem inventar valores. Carteira manual preservada em visão separada, sem soma ou conversão automática.
+- Conexões: instruções, registro, consentimentos/status, sincronização, reconferência, backup, saldos e faturas mantidos. Cadastro e diagnóstico ficam expansíveis; posições têm acesso à aba Investimentos.
+- Estado compartilhado normal compacto; conflito, rascunho e primeira cópia mantêm os controles completos. Nada foi alterado no backend, na base financeira ou nos consentimentos.
+- Seletor único `connectedInvestments.ts`: `ACTIVE` atual em centavos por moeda; resgatados, pendentes, desconhecidos e não retornados fora da soma. Falhas preservam último valor conhecido e sinalizam cobertura parcial. Situação desconhecida também torna a cobertura parcial. Período das transações não recorta posições.
+
+Verificação técnica: **175 testes, zero falhas/skips**, `npm test` exit 0; `npm run build` exit 0 (TypeScript app/node + Vite). Aviso de bundle >500 kB, SQLite experimental e avisos de encerramento do scanner Vite de harnesses antigos permanecem; não se afirma execução sem avisos. Novos testes cobrem teclado (setas/Home/End/foco), troca de abas sem chamadas ao controlador, card/resumo coerentes, independência do período e preservação de carteira/recuperação. RED do domínio herdado e RED da cobertura desconhecida observados antes do respectivo código; SSR novo também falhou antes da criação do componente.
+
+Cache real consultado exclusivamente por GET local e renderizado com React SSR: seletor/card/resumo coerentes, instituição sem contas representada, posições inativas excluídas e documento compartilhado idêntico antes/depois. **Isso não valida interação/layout no navegador nem equivale a nova sincronização real.** Relatório agregado ignorado em `.evidence/pg-004-2026-11-17/read-live-cache.json`; nenhum snapshot com valores reais foi gravado para essa conferência.
+
+**Aceite visual pendente:** conector do navegador indisponível (`The browser access host is unavailable`). No turno anterior, o controle Windows interrompeu a navegação por não conseguir confirmar a URL. Desktop/390 px, temas, console e operações de Conexões no navegador ainda precisam de verificação desta versão. A sincronização real repetida desta etapa não foi executada; idempotência segue coberta por fixtures/SQLite temporário e pelo marco PG-003.
+
+Graphify atualizado por AST local, code-only, sem chaves/LLM/rotulagem externa: **548 nós, 1319 relações brutas, 24 comunidades**. O grafo simples de clustering representa 1264 pares, agrupando 55 variantes de relações (por exemplo `calls`/`contains`); o diagnóstico aponta zero endpoints ausentes/pendentes e zero duplicatas exatas. As relações brutas ficam no JSON. Mapa em `.evidence/pg-004-2026-11-17/implementation-map/graphify-out/`; mapa auxilia navegação e não prova correção financeira.
+
+Commits locais da implementação: `4b24ecb` (seletor/testes/contrato) e `ef96960` (abas/interface/regressões). Documentação em commit próprio. Sem push, merge, publicação ou reset/restauração de dados. Evidências e build continuam ignorados pelo Git.
+
+
 ## Ativação bancária real — 17/11/2026
 
 **Integração local ativada e leitura real verificada** após a titular preencher uma nova credencial pelo formulário nativo privado. Esta seção prevalece sobre os bloqueios históricos de configuração/consentimento abaixo. Configuração e mapeamento permanecem em `%LOCALAPPDATA%/TrackerFinanceiro`, fora do Git e do OneDrive. Nenhum segredo foi incorporado ao código.

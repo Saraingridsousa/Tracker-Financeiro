@@ -33,7 +33,7 @@ No PowerShell, se `npm.ps1` for bloqueado pela política de scripts, use `npm.cm
 2. No Dashboard Pluggy, usando a mesma conta, escolha o conector **MeuPluggy**. Não escolha o banco diretamente nem Sandbox: o modo pessoal usa o proxy dos consentimentos existentes.
 3. No Windows, use `%LOCALAPPDATA%/TrackerFinanceiro/config.env`, **fora do checkout e do OneDrive**. Um modelo vazio já foi preparado neste PC; numa instalação nova, crie-o usando `.env.example`. Preencha `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` somente nesse arquivo privado. Não envie chaves, senhas ou códigos pelo chat. Não use variáveis `VITE_*` para segredos.
 4. Reinicie `npm run dev` ou `npm start` após configurar o arquivo. É possível indicar outro arquivo privado pela variável de ambiente `TRACKER_ENV_FILE`.
-5. Os quatro itens informados pela titular já estão em `%LOCALAPPDATA%/TrackerFinanceiro/connections.json`, privado/editável. O backend registra esse mapeamento no SQLite ao iniciar, sem criar conexões na Pluggy. Para uma instalação nova, use `connections.example.json` como modelo; o arquivo deve conter somente uma lista de `{ "itemId": "UUID", "label": "Apelido" }`. Alternativamente, registre um item existente em **Bancos conectados**. `TRACKER_CONNECTIONS_FILE` permite outro caminho privado.
+5. Os quatro itens informados pela titular já estão em `%LOCALAPPDATA%/TrackerFinanceiro/connections.json`, privado/editável. O backend registra esse mapeamento no SQLite ao iniciar, sem criar conexões na Pluggy. Para uma instalação nova, use `connections.example.json` como modelo; o arquivo deve conter somente uma lista de `{ "itemId": "UUID", "label": "Apelido" }`. Alternativamente, registre um item existente na aba **Conexões**. `TRACKER_CONNECTIONS_FILE` permite outro caminho privado.
 6. Clique em **Sincronizar dados** para consultar contas, saldos, transações e produtos disponíveis. O apelido não confirma o banco: a instituição é identificada pelos dados das contas, nunca pelo conector MeuPluggy compartilhado.
 
 Para localizar as credenciais: no [Dashboard](https://dashboard.pluggy.ai), abra **Aplicações**, fora da página Demo/JSON dos itens. Copie o **Client ID** da aplicação que contém os quatro itens; a engrenagem abre suas configurações. O **Client Secret** só é mostrado ao gerar. Se perdeu o anterior, gere outro nessa aplicação: o anterior é invalidado imediatamente e outras integrações que o utilizem também precisam ser atualizadas. Veja o [passo a passo oficial](https://docs.pluggy.ai/pt/docs/guides/dashboard-connectors#4-client-id-e-client-secret). Salve os dois valores somente nas linhas existentes `PLUGGY_CLIENT_ID=` e `PLUGGY_CLIENT_SECRET=` do config.env privado; preserve as demais linhas.
@@ -52,6 +52,14 @@ Fontes oficiais: [guia pessoal](https://docs.pluggy.ai/en/docs/guides/meu-pluggy
 - **Backup bancário v3** exporta histórico conectado, produtos e edições manuais, sem credenciais. O SQLite usa migração aditiva v4. É um arquivo financeiro privado; guarde com cuidado. A restauração bancária pela interface não faz parte deste incremento.
 - **Backup do histórico e preferências** mantém o fluxo JSON anterior para importações, categorias, regras e investimentos cadastrados. São dois conjuntos distintos, não um backup único.
 - Dados antigos em `localStorage` não são apagados nem transferidos silenciosamente para o SQLite. Estão em **Histórico importado**, no mesmo navegador/origem em que foram salvos. Desenvolvimento e produção usam portas/origens diferentes; exporte o histórico antes de mudar de origem.
+
+## Navegação do painel
+
+- **Visão Geral** abre primeiro com indicadores, gráficos e transações. O card bancário mostra o saldo líquido atual das posições elegíveis, sem aplicar o filtro mensal às posições.
+- **Investimentos** abre nos conectados da Pluggy, com filtros e histórico de resgatados. Instituições sem contas bancárias também aparecem. A **Carteira manual** continua separada e suas edições não alteram investimentos no banco.
+- **Conexões** reúne configuração, sincronização, reconferência, consentimentos, backup bancário, saldos e faturas. Trocar de aba não sincroniza o provedor.
+
+Valores de moedas diferentes ficam separados. Cobertura parcial, leitura antiga e situações desconhecidas são sinalizadas; valores preservados em falhas são o último valor conhecido. Detalhes da política e aceite em [PG-004](docs/specs/pg-004-abas-investimentos-conectados.md) e [ADR 005](docs/decisions/005-investimentos-conectados.md).
 
 ## Como interpretar o painel
 

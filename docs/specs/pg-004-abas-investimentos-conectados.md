@@ -34,3 +34,12 @@ Pedido de Sara em 17/11/2026, branch `feat/meu-pluggy-sync`. Reorganizar a inter
 ## Fora de escopo
 
 Cotações, B3, movimentos/ordens de investimentos, rentabilidade calculada, preço médio, conversão cambial, deduplicação entre carteira manual e conectada, alterações de backend sem necessidade comprovada.
+
+
+## Situação do aceite desta implementação
+
+- Domínio: A5/A7/A8/A10 com fixtures sintéticas; inclui exclusão explícita e cobertura parcial para situações desconhecidas.
+- SSR e harness do App: A1/A3/A4/A9/A11; teclado de A2 exercitado por callbacks/foco, sem afirmar comportamento visual do browser. A12 usa as regressões existentes de carteira e estado compartilhado.
+- A6 conferido com fixtures de item sem contas e renderização SSR somente leitura do cache real, junto da coerência de card/resumo e preservação do documento manual.
+- `npm test`: 175 testes/zero falhas/skips. Build aprovado. Logs técnicos ignorados em `.evidence/pg-004-2026-11-17/`.
+- Aceite no navegador, 390 px, temas, console e nova sincronização real repetida permanecem pendentes; o controle do navegador ficou indisponível. Não confundir SSR/API/build com a interface interativa validada.
