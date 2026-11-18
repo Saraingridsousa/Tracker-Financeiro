@@ -21,7 +21,9 @@ test('Painel explica configuração sem pedir senha e não depende de PDF', asyn
     assert.match(html, /https:\/\/meu.pluggy.ai/);
     const { default: App } = await vite.ssrLoadModule('/src/App.tsx');
     const app = renderToStaticMarkup(createElement(App));
-    assert.match(app, /banking-title/);
+    assert.doesNotMatch(app, /banking-title/);
+    assert.match(app, /role="tablist"/);
+    assert.match(app, /Conexões/);
     assert.match(app, /Resultado do período/);
     assert.match(app, /Histórico importado/);
     const { TransactionTable } = await vite.ssrLoadModule('/src/components/TransactionTable.tsx');

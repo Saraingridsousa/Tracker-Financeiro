@@ -1,3 +1,7 @@
+import { MainTabs } from './components/MainTabs';
+import type { MainTab } from './components/MainTabs';
+import { ConnectedInvestments, ConnectedInvestmentValue } from './components/ConnectedInvestments';
+import { summarizeConnectedInvestments } from './domain/connectedInvestments';
 import { SharedFinancePanel } from './components/SharedFinancePanel';
 import { useSharedFinance } from './hooks/useSharedFinance';
 import {
@@ -6,9 +10,7 @@ import {
   Download,
   FileText,
   Filter,
-  LayoutDashboard,
   Moon,
-  PieChart,
   Plus,
   Settings,
   Sun,
@@ -276,8 +278,10 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
   });
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'investments'>('overview');
+  const [activeTab, setActiveTab] = useState<MainTab>('overview');
   const banking = useBanking();
+  const connectedSummary = summarizeConnectedInvestments(banking, now());
+  const [investmentView, setInvestmentView] = useState<'connected' | 'manual'>('connected');
   const [dataSource, setDataSource] = useState<'banking' | 'legacy'>('banking');
   const shared = useSharedFinance(banking.snapshot.sharedStateAvailable === true || banking.snapshot.accessMode === 'private' || (typeof window !== 'undefined' && window.location?.protocol === 'https:'));
   const transactionsStore = useTransactions(shared.backing, banking.loaded !== false);
@@ -670,41 +674,18 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
             </div>
           </div>
         </header>
-        <BankingPanel banking={banking} />
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <label className="text-sm font-medium">Dados do painel <select aria-label="Fonte dos dados" value={dataSource} onChange={(event) => setDataSource(event.target.value as 'banking' | 'legacy')} className="ml-2 rounded-lg border border-slate-300 bg-transparent p-2 dark:border-slate-700"><option value="banking">Bancos conectados</option><option value="legacy">Histórico importado</option></select></label>
-          <p className="max-w-2xl text-xs text-slate-500">Fontes separadas para não contar os mesmos gastos duas vezes. Resultado liquidado em BRL não é saldo bancário; saldos por conta aparecem acima. Pendentes e outras moedas não entram nesses totais.</p>
-        </section>
-
-        <div className="mb-6 flex justify-start">
-          <div className="inline-flex items-center justify-start gap-1 rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-            {[
-              { key: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
-              { key: 'investments', label: 'Investimentos', icon: PieChart },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key as 'overview' | 'investments')}
-                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === tab.key
-                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
+        <MainTabs active={activeTab} onChange={setActiveTab} />
+        <div id={'panel-' + activeTab} role="tabpanel" aria-labelledby={'tab-' + activeTab} tabIndex={0} className="space-y-6 min-w-0">
         {activeTab === 'overview' ? (
           <>
-            {dataSource === 'banking' ? (transactions.length === 0 ? <section className="rounded-xl bg-cyan-50 p-5 text-sm text-cyan-900 dark:bg-cyan-950 dark:text-cyan-100">Nenhuma movimentação bancária armazenada ainda. Configure o Meu Pluggy e sincronize a conexão no painel acima. Seus arquivos antigos continuam disponíveis em Histórico importado.</section> : null) : transactions.length === 0 ? (
+            <section aria-label="Resumo das conexões" className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300"><span>{banking.loaded ? banking.snapshot.connections.length + ' conexões' : 'Lendo conexões…'} · {connectedSummary.partial ? 'Cobertura parcial' : 'Cache local'}{connectedSummary.lastReadAt ? ' · Última leitura: ' + new Date(connectedSummary.lastReadAt).toLocaleString('pt-BR') : ''}{banking.error ? ' · ' + banking.error : ''}</span><button type="button" className="font-medium text-cyan-700 underline dark:text-cyan-300" onClick={() => setActiveTab('connections')}>Gerenciar conexões</button></section>
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <label className="text-sm font-medium">Dados do painel <select aria-label="Fonte dos dados" value={dataSource} onChange={(event) => setDataSource(event.target.value as 'banking' | 'legacy')} className="ml-2 rounded-lg border border-slate-300 bg-transparent p-2 dark:border-slate-700"><option value="banking">Bancos conectados</option><option value="legacy">Histórico importado</option></select></label>
+          <p className="max-w-2xl text-xs text-slate-500">Fontes separadas para não contar os mesmos gastos duas vezes. Resultado liquidado em BRL não é saldo bancário; saldos por conta aparecem na aba Conexões. Pendentes e outras moedas não entram nesses totais.</p>
+        </section>
+
+
+            {dataSource === 'banking' ? (transactions.length === 0 ? <section className="rounded-xl bg-cyan-50 p-5 text-sm text-cyan-900 dark:bg-cyan-950 dark:text-cyan-100">Nenhuma movimentação bancária armazenada ainda. Configure o Meu Pluggy e sincronize a conexão na aba Conexões. Seus arquivos antigos continuam disponíveis em Histórico importado.</section> : null) : transactions.length === 0 ? (
               <section
                 className={`mb-8 rounded-2xl border-2 border-dashed p-8 transition ${
                   isDragging ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70'
@@ -766,13 +747,13 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
             { label: 'Resultado do período', value: summary.balance, icon: Wallet, tone: 'emerald' },
             { label: 'Entradas liquidadas', value: summary.income, icon: ArrowUpCircle, tone: 'cyan' },
             { label: 'Saídas liquidadas', value: summary.expenses, icon: ArrowDownCircle, tone: 'rose' },
-            { label: 'Total Investido', value: summary.totalInvested, icon: TrendingUp, tone: 'violet' },
+            { label: dataSource === 'banking' ? 'Valor atual dos investimentos' : 'Carteira manual · valor atual', value: summary.totalInvested, icon: TrendingUp, tone: 'violet' },
           ].map(({ label, value, icon: Icon, tone }) => (
             <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{formatCurrency(value)}</h3>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{label === 'Valor atual dos investimentos' ? <ConnectedInvestmentValue summary={connectedSummary} /> : formatCurrency(value)}</h3>
                 </div>
                 <div className={`rounded-xl p-3 ${toneStyles[tone as keyof typeof toneStyles]}`}>
                   <Icon className="h-5 w-5" />
@@ -889,7 +870,12 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
               ) : null}
             </div>
           </>
+        ) : activeTab === 'connections' ? (
+          <BankingPanel banking={banking} onShowInvestments={() => { setInvestmentView('connected'); setActiveTab('investments'); }} />
         ) : (
+          <div className="space-y-5">
+          <div role="group" aria-label="Origem dos investimentos" className="flex flex-wrap gap-2">{([{ key: 'connected', label: 'Conectados' }, { key: 'manual', label: 'Carteira manual' }] as const).map(view => <button type="button" key={view.key} aria-pressed={investmentView === view.key} onClick={() => setInvestmentView(view.key)} className={'rounded-lg border px-4 py-2 text-sm ' + (investmentView === view.key ? 'bg-cyan-500 text-slate-950' : '')}>{view.label}</button>)}</div>
+          {investmentView === 'connected' ? <ConnectedInvestments summary={connectedSummary} /> : <><p className="text-sm text-slate-500">Carteira manual independente. Estas operações não alteram investimentos no banco e não são somadas à carteira conectada.</p>
           <InvestmentsDashboard
             assets={assets}
             orders={orders}
@@ -899,8 +885,10 @@ function App({ now = () => new Date() }: { now?: () => Date } = {}) {
             onAddOrder={addOrder}
             onDeleteOrder={deleteOrder}
             onImportCsv={importAssetsFromCsv}
-          />
+          /></>}
+          </div>
         )}
+        </div>
       </div>
 
       <CategoryManagerModal
