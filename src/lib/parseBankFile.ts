@@ -177,7 +177,7 @@ const createTransaction = (row: Record<string, string>, index: number, fileName:
   const id = `${normalizedDate}-${description}-${index}-${Math.abs(amount).toFixed(2)}`;
   const bank = detectBankFromText(`${fileName} ${Object.values(row).join(' ')}`);
   const normalizedDescription = description.toLowerCase();
-  const isSelfTransfer = /(sara ingrid|sara i s o afonso|sara afonso|sara ingrid sousa|sara sousa|cp\s*:\s*\d{7,8}|pix (recebido|enviado).*sara|recebimento de transfer.*via pix.*sara|envio de transfer.*via pix.*sara|para sara|de sara)/i.test(normalizedDescription);
+  const isSelfTransfer = false;
   const isCreditCardPayment = /(pagamento on line|pagamento online|pagamento de fatura|pagamento efetuado|pagamento efetuada|paga.*fatura)/i.test(normalizedDescription);
 
   return {
@@ -333,7 +333,7 @@ const createInterCreditCardTransaction = (row: Record<string, string>, index: nu
   if (!description || !Number.isFinite(numericValue)) return null;
 
   const amount = Math.abs(Number(numericValue.toFixed(2)));
-  const isSelfTransfer = /(sara ingrid|sara i s o afonso|sara afonso|sara ingrid sousa|sara sousa|cp\s*:\s*\d{7,8}|pix (recebido|enviado).*sara|recebimento de transfer.*via pix.*sara|envio de transfer.*via pix.*sara|para sara|de sara)/i.test(description);
+  const isSelfTransfer = false;
   const isCreditCardPayment = /(pagamento on line|pagamento online|pagamento fatura cartao|pagamento de fatura|pagamento efetuado.*pagamento fatura|pagamento efetuado: pagamento fatura)/i.test(description);
 
   const transaction: Transaction = {

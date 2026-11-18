@@ -41,7 +41,7 @@ test('Resumo usa centavos e exclui pendentes, remanejo e moedas diferentes', () 
     { ...base, id: 'small-1', amount: 0.1 },
     { ...base, id: 'small-2', amount: 0.2 },
     { ...base, id: 'pending', amount: 500, providerStatus: 'PENDING' as const },
-    { ...base, id: 'internal', amount: 10, categoryId: 'transferencia' },
+    { ...base, id: 'internal', amount: 10, categoryId: 'transferencia', isSelfTransfer: true },
     { ...base, id: 'usd', amount: 700, currencyCode: 'USD' },
   ];
   const result = finance.summarizeTransactions(rows, categories);
@@ -53,20 +53,78 @@ test('Resumo usa centavos e exclui pendentes, remanejo e moedas diferentes', () 
 
 test('Flags antigas de transferência genérica não excluem um Pix de terceiro', () => {
   assert.equal(classifyTransaction({ ...base, isInternalTransfer: true, isSelfTransfer: false, isNeutral: true }).isNeutral, false);
-  assert.equal(classifyTransaction({ ...base, categoryId: 'transferencia' }).isSelfTransfer, true);
+  assert.equal(classifyTransaction({ ...base, categoryId: 'transferencia' }).isSelfTransfer, false);
 });
 
-test('Pix recebido de dinheiro de terceiro não entra em entradas', () => {
+test('PIX recebido de terceiro permanece receita', () => {
   const tx = {
     ...base,
     type: 'income' as const,
-    description: 'Pix recebido - Jose Ricardo De Sousa Afonso',
+    description: 'Pix recebido de terceiro',
     categoryId: 'uncategorized',
   };
-  assert.equal(finance.inferCategory(tx.description, categories, [], 'income'), 'transferencia');
-  assert.equal(classifyTransaction(tx, categories).isNeutral, true);
-  assert.equal(finance.isRealIncome(tx, categories), false);
-  assert.equal(finance.summarizeTransactions([tx], categories).income, 0);
+  assert.equal(finance.inferCategory(tx.description, categories, [], 'income'), 'uncategorized');
+  assert.equal(classifyTransaction(tx, categories).isNeutral, false);
+  assert.equal(finance.isRealIncome(tx, categories), true);
+  assert.equal(finance.summarizeTransactions([tx], categories).income, 24.5);
+});
+
+test('PIX e TED só são neutros com evidência própria ou confirmação manual', () => {
+  const restaurant = { ...base, amount: 85, description: 'PIX enviado para restaurante', categoryId: 'alimentacao' };
+  const otherPerson = { ...base, amount: 60, description: 'PIX enviado para outra pessoa', categoryId: 'outros' };
+  const tedThirdParty = { ...base, amount: 40, description: 'TED enviada para outra pessoa', categoryId: 'outros' };
+  const insufficient = { ...base, amount: 30, description: 'Transferência realizada', categoryId: 'uncategorized' };
+
+  for (const tx of [restaurant, otherPerson, tedThirdParty, insufficient]) {
+    assert.equal(classifyTransaction(tx, categories).isSelfTransfer, false);
+    assert.equal(classifyTransaction(tx, categories).isNeutral, false);
+  }
+
+  assert.equal(finance.summarizeTransactions([restaurant, otherPerson, tedThirdParty, insufficient], categories).expenses, 215);
+
+  const pixOwn = { ...base, description: 'PIX entre contas próprias', categoryId: 'transferencia', manualCategory: true };
+  const tedOwn = { ...base, description: 'TED entre contas próprias', categoryId: 'uncategorized', isSelfTransfer: true };
+  for (const tx of [pixOwn, tedOwn]) {
+    assert.equal(classifyTransaction(tx, categories).isSelfTransfer, true);
+    assert.equal(classifyTransaction(tx, categories).isNeutral, true);
+  }
+  assert.equal(finance.summarizeTransactions([pixOwn, tedOwn], categories).expenses, 0);
+});
+
+test('PIX, TED e transferência são classificados sem depender de caixa ou acentuação', () => {
+  for (const description of [
+    'PIX enviado para restaurante',
+    'pix enviado para restaurante',
+    'Pix enviado para restaurante',
+    'PIX ENVIADO PARA RESTAURANTE',
+    'TED enviada para terceiros',
+    'Transferência recebida de terceiros',
+  ]) {
+    const tx = { ...base, description, amount: 85, type: 'expense' as const, categoryId: 'alimentacao' };
+    assert.equal(classifyTransaction(tx, categories).isInternalTransfer, false);
+  }
+
+  const income = { ...base, description: 'TRANSFERÊNCIA RECEBIDA DE TERCEIROS', amount: 200, type: 'income' as const, categoryId: 'uncategorized' };
+  assert.equal(classifyTransaction(income, categories).isNeutral, false);
+  assert.equal(finance.isRealIncome(income, categories), true);
+});
+
+test('Investimentos, estornos e pagamentos de fatura preservam suas classificações', () => {
+  const categoriesWithSpecial = [
+    ...categories,
+    { id: 'investimentos', name: 'Investimentos', color: '#000', keywords: ['cdb'], type: 'expense' as const, isNeutral: true },
+    { id: 'pagamento_fatura', name: 'Pagamento de Fatura', color: '#000', keywords: [], type: 'expense' as const, isNeutral: true },
+  ];
+  const investment = { ...base, amount: 500, description: 'Aplicação CDB', categoryId: 'investimentos' };
+  const cardPayment = { ...base, amount: 900, description: 'Pagamento de fatura', categoryId: 'pagamento_fatura' };
+  const refund = { ...base, amount: 50, description: 'Estorno PIX restaurante', type: 'income' as const, categoryId: 'uncategorized' };
+
+  assert.equal(classifyTransaction(investment, categoriesWithSpecial).isInvestment, true);
+  assert.equal(finance.summarizeTransactions([investment], categoriesWithSpecial).expenses, 0);
+  assert.equal(classifyTransaction(cardPayment, categoriesWithSpecial).isCreditCardPayment, true);
+  assert.equal(finance.summarizeTransactions([cardPayment], categoriesWithSpecial).expenses, 0);
+  assert.equal(classifyTransaction(refund, categoriesWithSpecial).isNeutral, false);
+  assert.equal(finance.isRealIncome(refund, categoriesWithSpecial), true);
 });
 
 test('Compra parcelada é distribuída igualmente pelos meses das parcelas', () => {

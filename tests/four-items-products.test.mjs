@@ -53,7 +53,7 @@ test('explicit false outranks inferred transfer category and its neutral flag',(
  assert.equal(classifyTransaction(t,categories).isSelfTransfer,false);
  assert.equal(summarizeTransactions([t],categories).expenses,10);
  assert.equal(summarizeTransactions([{...t,isCreditCardPayment:true}],categories).expenses,0);
- assert.equal(classifyTransaction({...t,manualSelfTransfer:undefined},categories).isSelfTransfer,true);
+ assert.equal(classifyTransaction({...t,manualSelfTransfer:undefined},categories).isSelfTransfer,false);
 });
 
 test('item UUID case is immaterial, while provider IDs retain their case',()=>{

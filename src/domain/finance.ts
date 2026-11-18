@@ -46,11 +46,6 @@ export function inferCreditCardInstallment(tx: Pick<Transaction, 'date' | 'descr
 
 export function inferCategory(description: string, categories: Category[], rules: Rule[] = [], type?: TransactionType): string {
   const text = normalizeFinanceText(description);
-  if (type === 'income' && /\b(jose ricardo|jose ricardo de sousa afonso|cofrinho|cofre)\b/.test(text)) {
-    if (categories.some((category) => category.id === 'transferencia' && (category.type === 'both' || category.type === type))) {
-      return 'transferencia';
-    }
-  }
   const compatible = (id: string) => categories.some((c) => c.id === id && (!type || c.type === 'both' || c.type === type));
   const candidates = rules.filter((r) => r.isActive && compatible(r.categoryId)).flatMap((r) => r.keywords.map((keyword) => ({ categoryId: r.categoryId, keyword: normalizeFinanceText(keyword) }))).filter((r) => r.keyword && text.includes(r.keyword)).sort((a, b) => b.keyword.length - a.keyword.length);
   if (candidates.length) return candidates[0].categoryId;
@@ -66,11 +61,11 @@ export function inferCategory(description: string, categories: Category[], rules
 export function classifyTransaction(transaction: Transaction, categories: Category[] = []): Transaction {
   const text = normalizeFinanceText(transaction.description);
   const category = categories.find((entry) => entry.id === transaction.categoryId);
-  const isThirdPartyTransfer = transaction.type === 'income' &&
-    /\b(jose ricardo|jose ricardo de sousa afonso|cofrinho|cofre)\b/.test(text);
   const manualTransferRejected = transaction.manualSelfTransfer === true && transaction.isSelfTransfer === false;
-  const isSelfTransfer = !manualTransferRejected && (transaction.isSelfTransfer === true || transaction.categoryId === 'transferencia' || isThirdPartyTransfer);
-  const categoryNeutral = !(manualTransferRejected && transaction.categoryId === 'transferencia') && (category?.isNeutral || category?.excludeFromTotals);
+  const providerConfirmedSelfTransfer = transaction.isSelfTransfer === true;
+  const manuallyConfirmedSelfTransfer = transaction.manualCategory === true && transaction.categoryId === 'transferencia';
+  const isSelfTransfer = !manualTransferRejected && (providerConfirmedSelfTransfer || manuallyConfirmedSelfTransfer);
+  const categoryNeutral = category?.id !== 'transferencia' && Boolean(category?.isNeutral || category?.excludeFromTotals);
   const isCreditCardPayment = transaction.isCreditCardPayment === true || transaction.categoryId === 'pagamento_fatura' || text === 'statement payment' || /pagamento (?:de )?fatura|pgto fatura|pagamento efetuado.*fatura/.test(text);
   // Category inference already applies rules before keywords; a specific known
   // category (including a manual correction) must outrank this weaker text hint.
