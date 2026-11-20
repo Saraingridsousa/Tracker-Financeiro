@@ -12,11 +12,13 @@ A task is completed only with implementation, regression tests, integration/type
 
 ## Phase 1 — integrity and recovery
 
-- [ ] P1-01 / A04: versioned, runtime-validated unified snapshot/backup; strict legacy migration; incompatible formats fail before mutating any store.
-- [ ] P1-02 / A04: recovery snapshots, preservation of corrupt payloads, blocked destructive autosave, storage failure UI and explicit restore confirmation.
-- [ ] P1-03 / A03: account/provider-scoped stable identities, upsert corrections, equal legitimate purchases retained, manual override preservation.
-- [ ] P1-04: consistent persistence envelope, revision/concurrency handling, safe same-origin/cross-tab coordination and migration without deleting old keys/data.
-- [ ] P1-05: automated callback/storage integration tests plus test/typecheck tooling.
+Status legend: `[x]` implemented and regression-validated in the corresponding milestone; `[~]` in progress/partial; `[ ]` pending. Git/remote gate is verified at milestone publication. This is not a claim that all phases or live banking are complete.
+
+- [x] P1-01 / A04: versioned, runtime-validated unified snapshot/backup; strict legacy migration; incompatible formats fail before mutating any store.
+- [x] P1-02 / A04: recovery snapshots, preservation of corrupt payloads, blocked destructive autosave, storage failure UI and explicit restore confirmation.
+- [~] P1-03 / A03: account/provider-scoped stable identities, upsert corrections, equal legitimate purchases retained, manual override preservation.
+- [x] P1-04: consistent persistence envelope, revision/concurrency handling, safe same-origin/cross-tab coordination and migration without deleting old keys/data.
+- [x] P1-05: automated callback/storage integration tests plus test/typecheck tooling.
 
 ## Phase 2 — financial correctness and ingestion
 
@@ -40,7 +42,7 @@ A task is completed only with implementation, regression tests, integration/type
 
 ## Phase 4 — security and maintainability
 
-- [ ] P4-01 / A12: maintained dependency versions/distribution, refreshed lock, online audit, compatibility tests; no blind force fixes.
+- [~] P4-01 / A12: maintained dependency versions/distribution, refreshed lock, online audit, compatibility tests; no blind force fixes.
 - [ ] P4-02: loopback development/runtime defaults, safe ignore patterns, no sensitive logs or client credentials, bounded file/request processing.
 - [ ] P4-03: shared domain selectors/normalization, remove duplicate calculations, lazy heavy screens, cancellation/progress where applicable and bundle verification.
 - [ ] P4-04: accessible dialogs/keyboard/input labels, responsive/themes and loading/error/empty states verified in browser.
@@ -56,4 +58,14 @@ A task is completed only with implementation, regression tests, integration/type
 
 ## Evidence / phase log
 
-Implementation in progress. Detailed audit and private historical reproductions remain outside this repository. No phase is marked complete yet. Bank consent/coverage, public hosting and paid plans remain out of scope.
+### Milestone 1 — shared data safety
+
+Implemented `src/data/{snapshot,financeStore,transactionIdentity,defaultCategories}.ts`, shared both hooks, App validated restore/confirmation/recovery UI, and explicit amount/provenance/override types. Runtime validates all five collections before a single primary snapshot write. Reads/mount do not autosave; corruption/read/quota/recovery failure preserves originals and blocks writes. Monotonic revisions + Web Locks serialize writes; stale tabs fail closed. Restores and bulk clears preserve non-rotating recovery archives, available for export; a valid previous snapshot can be explicitly restored. Candidate validation does not latch a healthy store. Category deletion/dependent reassignment is atomic, including rule/override cleanup.
+
+Identity core retains equal legitimate purchases, scoped corrections, immutable import namespace, manual overrides and ambiguous candidates instead of dropping them. **P1-03 remains partial until Phase 2 attaches source/account provenance in every parser and exposes review candidates.** A bank label alone is deliberately not accepted as an account identity. Legacy records are not silently classified or rewritten on load.
+
+Verification: 62 synthetic regression tests, including actual React hooks and five App restore handlers (only chart rendering replaced); application/test typechecks; real production build. jsdom is not browser E2E. Independent read-only source review produced seven concrete findings; validation, immutable identity, queued restore, persistent recovery export, atomic dependent changes, candidate-error handling and null legacy collections were addressed and covered. Remaining form submit/promise UX belongs to P2/P3/P4, and portfolio accounting/history has not been corrected yet.
+
+Security prerequisite: older added test tooling introduced critical advisories, so it was not committed. Clean, non-forced dependency resolution selected Vitest 5.1.1, Vite 8.3.8 and plugin-react 6.3.0, with Bundler module resolution and test project references. Fresh `npm ci`, tests/typechecks/build pass on Node 22.18.0. Current online audit: **one pre-existing high issue (`xlsx`), zero critical/moderate**; maintained SheetJS distribution is still pending P2/P4. Large chunks remain pending P4. Failed wrapper/CLI attempts are not counted as successful work.
+
+Work branch is **fix/audit-remediation**. Push each validated milestone there; **do not merge into main** without Sara's explicit authorization. Main remains at the initial checklist commit. Private audit/raw execution evidence remains outside Git. Browser financial data was never opened or modified; fixtures are synthetic. Backend, real bank consent/coverage, public hosting and paid plans remain unimplemented/out of scope for this milestone. Full audit remediation is still in progress.

@@ -1,59 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { getFinanceStore, useFinanceCollection } from '../data/financeStore';
+import { parseData } from '../data/snapshot';
 
 import type { AssetPosition, AssetType, InvestmentBackupPayload, InvestmentOrder } from '../types/finance';
-
-const ASSETS_KEY = 'tracker-financeiro:investments';
-const ORDERS_KEY = 'tracker-financeiro:investment-orders';
-
-const readAssets = (): AssetPosition[] => {
-  if (typeof window === 'undefined') return [];
-
-  const raw = window.localStorage.getItem(ASSETS_KEY);
-  if (!raw) return [];
-
-  try {
-    return JSON.parse(raw) as AssetPosition[];
-  } catch {
-    return [];
-  }
-};
-
-const readOrders = (): InvestmentOrder[] => {
-  if (typeof window === 'undefined') return [];
-
-  const raw = window.localStorage.getItem(ORDERS_KEY);
-  if (!raw) return [];
-
-  try {
-    return JSON.parse(raw) as InvestmentOrder[];
-  } catch {
-    return [];
-  }
-};
-
-const persistAssets = (assets: AssetPosition[]) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(ASSETS_KEY, JSON.stringify(assets));
-};
-
-const persistOrders = (orders: InvestmentOrder[]) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-};
 
 const parseCsvValue = (value: string) => value.trim();
 
 export const useInvestments = () => {
-  const [assets, setAssets] = useState<AssetPosition[]>(readAssets());
-  const [orders, setOrders] = useState<InvestmentOrder[]>(readOrders());
-
-  useEffect(() => {
-    persistAssets(assets);
-  }, [assets]);
-
-  useEffect(() => {
-    persistOrders(orders);
-  }, [orders]);
+  const [assets, setAssets] = useFinanceCollection('assets');
+  const [orders, setOrders] = useFinanceCollection('investmentOrders');
 
   const addAsset = (asset: Omit<AssetPosition, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     const normalized: AssetPosition = {
@@ -113,8 +68,7 @@ export const useInvestments = () => {
   };
 
   const deleteAsset = (assetId: string) => {
-    setAssets((prev) => prev.filter((asset) => asset.id !== assetId));
-    setOrders((prev) => prev.filter((order) => order.assetId !== assetId));
+    return getFinanceStore().update(data => ({ ...data, assets: data.assets.filter(asset => asset.id !== assetId), investmentOrders: data.investmentOrders.filter(order => order.assetId !== assetId) }));
   };
 
   const addOrder = (order: Omit<InvestmentOrder, 'id'> & { id?: string }) => {
@@ -225,18 +179,11 @@ export const useInvestments = () => {
     };
   }, [assets]);
 
-  const resetAllData = () => {
-    setAssets([]);
-    setOrders([]);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(ASSETS_KEY);
-      window.localStorage.removeItem(ORDERS_KEY);
-    }
-  };
-
+  const resetAllData = () => getFinanceStore().update(data => ({ ...data, assets: [], investmentOrders: [] }), true);
   const importBackup = (payload: InvestmentBackupPayload) => {
-    setAssets(payload.assets ?? []);
-    setOrders(payload.investmentOrders ?? []);
+    const store = getFinanceStore();
+    const data = parseData({ ...store.getStatus().snapshot.data, assets: payload.assets, investmentOrders: payload.investmentOrders });
+    return store.update(previous => ({ ...previous, assets: data.assets, investmentOrders: data.investmentOrders }));
   };
 
   const exportBackup = (): InvestmentBackupPayload => ({

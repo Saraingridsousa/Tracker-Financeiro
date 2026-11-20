@@ -7,7 +7,17 @@ export interface Transaction {
   id: string;
   date: string; // ISO date YYYY-MM-DD
   description: string;
-  amount: number; // positive value in cents or units; use number for simplicity
+  amount: number; // Non-negative BRL major units (reais), never cents. Direction is `type`.
+  currency?: string; // Legacy records are BRL; other currencies must not be summed as BRL.
+  accountId?: string;
+  providerId?: string;
+  providerTransactionId?: string;
+  sourceRecordId?: string;
+  identityScope?: string; // Immutable import namespace, not an asserted real bank-account identity.
+  identityAmbiguous?: boolean;
+  importSourceId?: string;
+  categoryManuallyAssigned?: boolean;
+  manualOverrides?: Partial<Pick<Transaction, 'date' | 'description' | 'amount' | 'type' | 'categoryId' | 'bank' | 'isNeutral' | 'isInternalTransfer' | 'isSelfTransfer' | 'isInvestment' | 'isCreditCardPayment'>>;
   type: TransactionType;
   categoryId: string;
   categoryName?: string;

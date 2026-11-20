@@ -23,7 +23,8 @@ import { TransactionTable } from './components/TransactionTable';
 import { useInvestments } from './hooks/useInvestments';
 import { parseBankFile } from './lib/parseBankFile';
 import { useTransactions } from './hooks/useTransactions';
-import type { BackupPayload, Category, Transaction } from './types/finance';
+import { useFinanceState } from './data/financeStore';
+import type { Category, Transaction } from './types/finance';
 
 const toneStyles = {
   emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
@@ -320,8 +321,10 @@ function App() {
   const [incomeChartPeriod, setIncomeChartPeriod] = useState<string>('ALL');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
-      const savedTheme = window.localStorage.getItem('tracker-theme');
-      if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+      try {
+        const savedTheme = window.localStorage.getItem('tracker-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+      } catch { /* Finance recovery UI still needs to mount when storage is denied. */ }
     }
 
     return 'light';
@@ -329,6 +332,7 @@ function App() {
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'investments'>('overview');
+  const finance = useFinanceState();
   const transactionsStore = useTransactions();
   const investmentsStore = useInvestments();
   const { portfolioSummary } = investmentsStore;
@@ -346,7 +350,6 @@ function App() {
     updateTransaction,
     updateTransactionCategory,
     deleteTransaction,
-    resetAllData,
     importBackup,
     exportBackup,
   } = transactionsStore;
@@ -360,14 +363,12 @@ function App() {
     deleteOrder,
     importAssetsFromCsv,
     resetAllData: resetInvestments,
-    importBackup: importInvestmentBackup,
-    exportBackup: exportInvestmentBackup,
   } = investmentsStore;
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem('tracker-theme', theme);
+    try { window.localStorage.setItem('tracker-theme', theme); } catch { /* Theme persistence is optional. */ }
   }, [theme]);
 
   const filteredTransactions = useMemo(() => {
@@ -534,7 +535,7 @@ function App() {
         return;
       }
 
-      addTransactions(parsed);
+      await addTransactions(parsed);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível importar este arquivo.';
       window.alert(message);
@@ -544,10 +545,8 @@ function App() {
   };
 
   const exportBackupFile = () => {
-    const payload = {
-      ...exportBackup(),
-      ...exportInvestmentBackup(),
-    };
+    if (finance.blocked) { window.alert('Os dados salvos não foram validados. Use Exportar recuperação antes de restaurar.'); return; }
+    const payload = exportBackup();
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -557,33 +556,49 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const exportRecoveryFile = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(finance.store.exportRecovery(), null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'tracker-financeiro-recovery.json'; link.click(); URL.revokeObjectURL(url);
+  };
+  const restorePrevious = async () => {
+    try {
+      const previous = finance.store.previousSnapshot();
+      if (window.confirm(`Restaurar a cópia anterior com ${previous.data.transactions.length} transações e ${previous.data.assets.length} posições? A versão atual também será preservada.`)) await importBackup(previous);
+    } catch { window.alert('Não há cópia anterior válida para restauração automática. Exporte a recuperação para preservar e examinar os dados.'); }
+  };
   const importBackupFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const text = await file.text();
-    const payload = JSON.parse(text) as BackupPayload;
-    importBackup(payload);
-    importInvestmentBackup({
-      assets: payload.assets ?? [],
-      investmentOrders: payload.investmentOrders ?? [],
-      exportedAt: payload.exportedAt ?? new Date().toISOString(),
-    });
-    event.target.value = '';
+    try {
+      if (file.size > 10 * 1024 * 1024) throw new Error('Backup excede o limite de 10 MiB.');
+      const payload: unknown = JSON.parse(await file.text());
+      const preview = finance.store.previewBackup(payload);
+      if (!window.confirm(`Restaurar ${preview.data.transactions.length} transações, ${preview.data.assets.length} posições e ${preview.data.investmentOrders.length} ordens? Os dados atuais serão substituídos após salvar uma cópia de recuperação.`)) return;
+      await importBackup(payload);
+    } catch (error) {
+      window.alert(error instanceof SyntaxError ? 'JSON inválido. Nenhum dado foi restaurado.' : error instanceof Error ? error.message : 'Falha na restauração. Dados atuais preservados.');
+    } finally { event.target.value = ''; }
   };
 
-  const clearAllData = () => {
+  const clearAllData = async () => {
     if (!window.confirm('Tem certeza que deseja limpar todos os dados? Esta ação não pode ser desfeita.')) {
       return;
     }
 
-    resetAllData();
-    resetInvestments();
+    try { await finance.store.resetAll(); } catch { /* Error and recovery action are shown below. */ }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+        {finance.error && (
+          <section role="alert" className="rounded-xl border border-amber-500 bg-amber-50 p-4 text-amber-950 dark:bg-amber-950 dark:text-amber-100">
+            <p>{finance.error}</p>
+            <button type="button" className="mt-2 underline" onClick={exportRecoveryFile}>Exportar recuperação</button>
+            <button type="button" className="ml-4 underline" onClick={() => backupInputRef.current?.click()}>Restaurar backup válido</button>
+          </section>
+        )}
         <header className="mb-8 flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-soft backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -659,10 +674,13 @@ function App() {
                       <span>Restaurar backup (.json)</span>
                     </button>
 
+                    <button type="button" onClick={exportRecoveryFile} className="block w-full px-4 py-3 text-left text-sm">Exportar recuperações preservadas</button>
+                    <button type="button" onClick={restorePrevious} className="block w-full px-4 py-3 text-left text-sm">Restaurar cópia anterior</button>
+
                     <button
                       type="button"
                       onClick={() => {
-                        resetAllData();
+                        if (window.confirm('Limpar transações? Categorias, regras e investimentos serão preservados; uma cópia de recuperação será salva.')) void finance.store.update(data => ({ ...data, transactions: [] }), true).catch(() => {});
                         setShowSettingsMenu(false);
                       }}
                       className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-amber-600 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
@@ -673,7 +691,7 @@ function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        resetInvestments();
+                        if (window.confirm('Limpar posições e ordens? Uma cópia de recuperação será salva antes da alteração.')) void resetInvestments().catch(() => {});
                         setShowSettingsMenu(false);
                       }}
                       className="flex w-full items-center justify-between border-t border-slate-200 px-4 py-3 text-left text-sm text-rose-600 transition hover:bg-rose-50 dark:border-slate-700 dark:text-rose-400 dark:hover:bg-rose-950/40"

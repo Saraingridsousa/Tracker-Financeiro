@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tests.tsbuildinfo",
+    "types": ["vite/client", "node", "vitest/globals"]
+  },
+  "include": ["src", "tests", "vitest.config.ts"]
+}

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { getFinanceStore, useFinanceCollection } from '../data/financeStore';
+import { defaultCategories } from '../data/defaultCategories';
+import { pickManualOverrides, transactionScope, upsertTransactions } from '../data/transactionIdentity';
 
-import type { BackupPayload, Category, DashboardSummary, Rule, Transaction } from '../types/finance';
-
-const STORAGE_KEY = 'tracker-financeiro:data';
-const RULES_KEY = 'tracker-financeiro:rules';
+import type { Category, DashboardSummary, Rule, Transaction } from '../types/finance';
 
 const normalizeImportText = (value: string) =>
   value
@@ -34,109 +34,12 @@ const classifyTransactionFlags = (transaction: Transaction): Transaction => {
   };
 };
 
-const buildTransactionFingerprint = (transaction: Pick<Transaction, 'date' | 'description' | 'amount' | 'type'>) => {
-  const normalized = normalizeImportText(`${transaction.date}|${transaction.description}|${Math.abs(transaction.amount).toFixed(2)}|${transaction.type}`);
-  return normalized;
-};
-
-const defaultCategories: Category[] = [
-  { id: 'alimentacao', name: 'Alimentação', color: '#ef4444', keywords: ['uber', 'restaurante', 'mercado', 'padaria', 'delivery'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'moradia', name: 'Moradia', color: '#f59e0b', keywords: ['aluguel', 'condominio', 'luz', 'água', 'internet'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'transporte', name: 'Transporte', color: '#3b82f6', keywords: ['uber', 'metro', 'onibus', 'combustivel', 'posto'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'lazer', name: 'Lazer', color: '#8b5cf6', keywords: ['cinema', 'spotify', 'streaming', 'ingresso'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'saude', name: 'Saúde', color: '#10b981', keywords: ['farmacia', 'medico', 'consulta', 'dentista'], type: 'expense', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'investimentos', name: 'Investimentos', color: '#06b6d4', keywords: ['investimento', 'aplicacao', 'aplicação', 'resgate', 'cdb', 'lci', 'debito online td', 'debito online t/d', 'selic', 'tesouro', 'investir'], type: 'expense', isDefault: true, isNeutral: true, excludeFromTotals: true },
-  { id: 'transferencia', name: 'Transferência Entre Contas', color: '#a78bfa', keywords: ['sara ingrid', 'sara i s o afonso', 'sara afonso', 'pix recebido', 'pix enviado', 'recebimento de transferencia', 'recebimento de transferência', 'envio de transferencia', 'envio de transferência', 'mesma titularidade', 'conta propria', 'entre contas'], type: 'both', isDefault: true, isNeutral: true, excludeFromTotals: true },
-  { id: 'pagamento_fatura', name: 'Pagamento de Fatura', color: '#f97316', keywords: ['pagamento de fatura', 'pagamento fatura cartao', 'pagamento efetuado pagamento fatura', 'pgto fatura', 'fatura', 'invoice', 'payment'], type: 'expense', isDefault: true, isNeutral: true, excludeFromTotals: true },
-  { id: 'proventos', name: 'Receitas / Proventos e Dividendos', color: '#22c55e', keywords: ['prov rendimento', 'prov dividendos', 'prov juros s capital', 'credito evento b3', 'crédito evento b3', 'dividendos', 'juros sobre capital'], type: 'income', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'salario', name: 'Salário/Entradas', color: '#22c55e', keywords: ['salario', 'beneficio', 'pagamento', 'venda'], type: 'income', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'outros', name: 'Outros', color: '#64748b', keywords: ['varios', 'outros'], type: 'both', isDefault: true, isNeutral: false, excludeFromTotals: false },
-  { id: 'uncategorized', name: 'Sem categoria', color: '#cbd5e1', keywords: [], type: 'both', isDefault: true, isNeutral: false, excludeFromTotals: false },
-];
-
-const readStorage = (): { transactions: Transaction[]; categories: Category[] } => {
-  if (typeof window === 'undefined') {
-    return { transactions: [], categories: defaultCategories };
-  }
-
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return { transactions: [], categories: defaultCategories };
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as { transactions?: Transaction[]; categories?: Category[] };
-    return {
-      transactions: sortTransactionsByDateDesc((parsed.transactions ?? []).map(classifyTransactionFlags)),
-      categories: parsed.categories?.length ? parsed.categories : defaultCategories,
-    };
-  } catch {
-    return { transactions: [], categories: defaultCategories };
-  }
-};
-
-const readRules = (): Rule[] => {
-  if (typeof window === 'undefined') return [];
-
-  const raw = window.localStorage.getItem(RULES_KEY);
-  if (!raw) return [];
-
-  try {
-    return JSON.parse(raw) as Rule[];
-  } catch {
-    return [];
-  }
-};
-
-const persist = (transactions: Transaction[], categories: Category[]) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ transactions, categories }));
-};
-
-const persistRules = (rules: Rule[]) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(RULES_KEY, JSON.stringify(rules));
-};
-
-const sortTransactionsByDateDesc = (items: Transaction[]) =>
-  [...items].sort((a, b) => {
-    const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
-    if (dateDiff !== 0) return dateDiff;
-    return (a.id ?? '').localeCompare(b.id ?? '');
-  });
-
 export const useTransactions = () => {
-  const initialData = readStorage();
-  const [transactions, setTransactions] = useState<Transaction[]>(sortTransactionsByDateDesc(initialData.transactions));
-  const [categories, setCategories] = useState<Category[]>(initialData.categories);
-  const [rules, setRules] = useState<Rule[]>(readRules());
+  const [transactions, setTransactions] = useFinanceCollection('transactions');
+  const [categories, setCategories] = useFinanceCollection('categories');
+  const [rules, setRules] = useFinanceCollection('rules');
 
-  useEffect(() => {
-    persist(transactions, categories);
-  }, [transactions, categories]);
-
-  useEffect(() => {
-    persistRules(rules);
-  }, [rules]);
-
-  const addTransactions = (incoming: Transaction[]) => {
-    setTransactions((prev) => {
-      const normalizedIncoming = incoming.map(classifyTransactionFlags);
-      const map = new Map(prev.map((item) => [item.id, classifyTransactionFlags(item)]));
-      const seenFingerprints = new Set(prev.map((item) => buildTransactionFingerprint(item)));
-
-      normalizedIncoming.forEach((item) => {
-        const fingerprint = buildTransactionFingerprint(item);
-
-        if (!seenFingerprints.has(fingerprint) && !map.has(item.id)) {
-          map.set(item.id, item);
-          seenFingerprints.add(fingerprint);
-        }
-      });
-
-      return sortTransactionsByDateDesc(Array.from(map.values()));
-    });
-  };
+  const addTransactions = (incoming: Transaction[]) => getFinanceStore().update(data => ({ ...data, transactions: upsertTransactions(data.transactions, incoming.map(classifyTransactionFlags)) }));
 
   const addCategory = (category: Omit<Category, 'id'> & { id?: string }) => {
     const newCategory: Category = {
@@ -160,12 +63,19 @@ export const useTransactions = () => {
   };
 
   const deleteCategory = (categoryId: string) => {
-    setCategories((prev) => prev.filter((category) => category.id !== categoryId));
-    setTransactions((prev) =>
-      prev.map((transaction) =>
-        transaction.categoryId === categoryId ? { ...transaction, categoryId: 'uncategorized' } : transaction,
-      ),
-    );
+    return getFinanceStore().update(data => {
+      if (categoryId === 'uncategorized') throw new Error('A categoria de recuperação não pode ser removida.');
+      const categories = data.categories.filter(category => category.id !== categoryId);
+      if (!categories.some(category => category.id === 'uncategorized')) categories.push(structuredClone(defaultCategories.find(category => category.id === 'uncategorized')!));
+      return {
+        ...data, categories,
+        rules: data.rules.filter(rule => rule.categoryId !== categoryId),
+        transactions: data.transactions.map(transaction => {
+          const manualOverrides = transaction.manualOverrides?.categoryId === categoryId ? { ...transaction.manualOverrides, categoryId: 'uncategorized' } : transaction.manualOverrides;
+          return { ...transaction, manualOverrides, categoryId: transaction.categoryId === categoryId ? 'uncategorized' : transaction.categoryId };
+        }),
+      };
+    });
   };
 
   const inferCategory = (description: string): string => {
@@ -279,7 +189,7 @@ export const useTransactions = () => {
     setTransactions((prev) =>
       prev.map((transaction) =>
         transaction.id === transactionId
-          ? { ...transaction, categoryId, updatedAt: new Date().toISOString() }
+          ? { ...transaction, categoryId, categoryManuallyAssigned: true, manualOverrides: { ...transaction.manualOverrides, categoryId }, updatedAt: new Date().toISOString() }
           : transaction,
       ),
     );
@@ -292,6 +202,9 @@ export const useTransactions = () => {
           ? {
               ...transaction,
               ...updates,
+              identityScope: transactionScope(transaction),
+              id: transaction.id,
+              manualOverrides: { ...transaction.manualOverrides, ...pickManualOverrides(updates) },
               updatedAt: new Date().toISOString(),
             }
           : transaction,
@@ -319,28 +232,9 @@ export const useTransactions = () => {
     setRules((prev) => prev.filter((rule) => rule.id !== ruleId));
   };
 
-  const resetAllData = () => {
-    setTransactions([]);
-    setCategories(defaultCategories);
-    setRules([]);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(STORAGE_KEY);
-      window.localStorage.removeItem(RULES_KEY);
-    }
-  };
-
-  const importBackup = (payload: BackupPayload) => {
-    setTransactions(sortTransactionsByDateDesc(payload.transactions ?? []));
-    setCategories(payload.categories?.length ? payload.categories : defaultCategories);
-    setRules(payload.rules ?? []);
-  };
-
-  const exportBackup = (): BackupPayload => ({
-    transactions,
-    categories,
-    rules,
-    exportedAt: new Date().toISOString(),
-  });
+  const resetAllData = () => getFinanceStore().update(data => ({ ...data, transactions: [], categories: structuredClone(defaultCategories), rules: [] }), true);
+  const importBackup = (payload: unknown) => getFinanceStore().restore(payload, true);
+  const exportBackup = () => getFinanceStore().getStatus().snapshot;
 
   return {
     transactions,
